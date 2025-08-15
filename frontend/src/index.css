@@ -1,13 +1,87 @@
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+
+/*************************
+  Light + Dark themes
+**************************/
+
+:root {
+  color-scheme: light;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+.dark {
+  color-scheme: dark;
 }
+
+/*************************
+  Layout & components
+**************************/
+
+.container-app {
+  @apply grid grid-cols-[460px,1fr] gap-6 h-screen p-6 bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100;
+}
+
+.topbar {
+  @apply col-span-2 -mt-2 -mx-2 mb-2 flex items-center justify-between px-2;
+}
+
+.brand {
+  @apply text-lg font-semibold tracking-tight text-slate-800 dark:text-slate-100;
+}
+
+.theme-toggle {
+  @apply inline-flex items-center gap-2 text-xs rounded-full border border-slate-200 px-3 py-1.5 text-slate-600 hover:bg-slate-50 transition dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-900;
+}
+
+.card {
+  @apply bg-white rounded-2xl border border-slate-200 shadow-soft overflow-hidden dark:bg-slate-900 dark:border-slate-800;
+}
+
+.card-header {
+  @apply flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/70;
+}
+
+.primary {
+  @apply inline-flex items-center gap-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm px-3 py-2 transition;
+}
+
+.editor {
+  @apply w-full min-h-[240px] resize-y bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 px-4 py-3 outline-none font-mono text-sm;
+}
+
+.hint { @apply text-slate-500 dark:text-slate-400 text-xs px-4 py-2 border-t border-dashed border-slate-200 dark:border-slate-800; }
+
+.error { @apply bg-rose-50 border border-rose-200 text-rose-700 px-4 py-2 rounded-lg dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-200; }
+
+/* Insights emphasis */
+.insights-wrap {
+  @apply grid gap-3 p-3;
+}
+.insight-card {
+  @apply rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm flex items-start gap-3 dark:bg-slate-900 dark:border-slate-800;
+}
+.insight-badge {
+  @apply inline-flex items-center justify-center rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200;
+}
+.insight-title {
+  @apply text-sm font-semibold text-slate-800 dark:text-slate-100;
+}
+.insight-sub {
+  @apply text-xs text-slate-500 dark:text-slate-400;
+}
+
+.table-wrap { @apply overflow-auto max-h-80; }
+
+.filters { @apply flex gap-2 flex-wrap; }
+.chip { @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 px-2 py-1 rounded-full text-xs; }
+.chip.active { @apply border-brand-600 ring-1 ring-brand-200 dark:ring-brand-900/40; }
+
+.graph { @apply w-full h-[calc(100vh-64px)]; }
+.legend { @apply flex items-center gap-3 text-slate-500 dark:text-slate-400 text-xs; }
+.legend-dot { @apply inline-block w-2.5 h-2.5 rounded-full mr-1; }
+.legend .ctx { @apply bg-brand-600; }
+.legend .ins { @apply bg-emerald-600; }
+.legend .cal { @apply bg-rose-600; }
