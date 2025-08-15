@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ThemeProvider } from './theme/ThemeContext';
 import Topbar from './components/Topbar';
 import Editor from './components/Editor';
 import ForceGraph from './components/ForceGraph';
@@ -38,19 +39,16 @@ function App() {
   }
 
   return (
-    <>
-      <Topbar />
-      <div className="container-app">
-        <aside className="flex flex-col gap-4">
+    <ThemeProvider>
+      <div className="App">
+        <Topbar />
+        <div style={{ display: 'flex', flexDirection: 'row', gap: 24, marginTop: 24 }}>
           <Editor value={code} onChange={setCode} onSubmit={onSubmit} loading={loading} />
-          {error && <div className="error">{error}</div>}
-          <InsightTable insights={insights} />
-        </aside>
-        <main className="min-h-0">
           <ForceGraph insights={insights} />
-        </main>
+          <InsightTable insights={insights} />
+        </div>
       </div>
-    </>
+    </ThemeProvider>
   );
 }
 
