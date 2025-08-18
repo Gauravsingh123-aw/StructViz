@@ -6,6 +6,10 @@ import ForceGraph from './components/ForceGraph';
 import InsightTable from './components/InsightTable';
 import { Insight } from './types';
 import { convertCodeToInsights } from './api';
+import SiteHeader from './components/SiteHeader';
+import Hero from './components/Hero';
+import Features from './components/Features';
+import Contact from './components/Contact';
 
 const SAMPLE = `// Try me
 function add(a, b) {
@@ -40,18 +44,28 @@ function App() {
 
   return (
     <ThemeProvider>
-      <div className="container-app">
-        <Topbar />
-        <div className="space-y-4">
-          <Editor value={code} onChange={setCode} onSubmit={onSubmit} loading={loading} />
-          {error && <div className="error">{error}</div>}
-        </div>
-        <div className="content flex flex-col gap-4">
-          <ForceGraph insights={insights} />
-        </div>
-        <div className="space-y-4">
-          <InsightTable insights={insights} />
-        </div>
+      <div className="min-h-screen bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+        <SiteHeader />
+        <Hero />
+        <Features />
+        <section id="playground" className="max-w-7xl mx-auto px-4 py-10">
+          <Topbar />
+          <div className="grid gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <Editor value={code} onChange={setCode} onSubmit={onSubmit} loading={loading} />
+                {error && <div className="error">{error}</div>}
+              </div>
+              <div className="space-y-4">
+                <InsightTable insights={insights} />
+              </div>
+            </div>
+            <div>
+              <ForceGraph insights={insights} />
+            </div>
+          </div>
+        </section>
+        <Contact />
       </div>
     </ThemeProvider>
   );

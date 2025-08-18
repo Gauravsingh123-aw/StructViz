@@ -85,3 +85,9 @@ html, body, #root { height: 100%; }
 .legend .ctx { @apply bg-brand-600; }
 .legend .ins { @apply bg-emerald-600; }
 .legend .cal { @apply bg-rose-600; }
+.legend .fn { @apply bg-emerald-600; }
+.legend .call { @apply bg-rose-600; }
+.legend .mod { @apply bg-cyan-500; }
+.legend .cls { @apply bg-amber-500; }
+
+/* Improve contrast for light and vibrant by adding dark borders on nodes handled in graph via stroke */

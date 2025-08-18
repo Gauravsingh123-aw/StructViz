@@ -10,22 +10,58 @@ const TYPES: Insight['type'][] = [
   'BinaryExpression',
   'Identifier',
   'StringLiteral',
+  'BooleanLiteral',
+  'NumericLiteral',
+  'NullLiteral',
+  'TemplateLiteral',
+  'Import',
+  'Export',
+  'Class',
+  'Assignment',
+  'Update',
+  'Return',
+  'Throw',
+  'TryCatch',
 ];
 
 function describe(i: Insight) {
   switch (i.type) {
     case 'Variable':
-      return `${i.name ?? 'unknown'}${i.init ? ` = ${i.init}` : ''}`;
+      return `${i.name ?? 'unknown'}${(i as any).init ? ` = ${(i as any).init}` : ''}`;
     case 'FunctionDefinition':
-      return `${i.name}(${i.params.join(', ')})`;
+      return `${(i as any).name}(${(i as any).params.join(', ')})`;
     case 'FunctionCall':
-      return `${i.callee}(${i.args.join(', ')})`;
+      return `${(i as any).callee}(${(i as any).args.join(', ')})`;
     case 'BinaryExpression':
-      return `${i.left ?? ''} ${i.operator} ${i.right ?? ''}`.trim();
+      return `${(i as any).left ?? ''} ${(i as any).operator} ${(i as any).right ?? ''}`.trim();
     case 'Identifier':
-      return i.name;
+      return (i as any).name;
     case 'StringLiteral':
-      return i.value;
+      return (i as any).value;
+    case 'BooleanLiteral':
+      return String((i as any).value);
+    case 'NumericLiteral':
+      return String((i as any).value);
+    case 'NullLiteral':
+      return 'null';
+    case 'TemplateLiteral':
+      return '`' + ((i as any).parts || []).join('${…}') + '`';
+    case 'Import':
+      return `import from ${(i as any).source || '?'}`;
+    case 'Export':
+      return `export ${(i as any).names?.join(', ') || (i as any).exportKind || ''}`.trim();
+    case 'Class':
+      return `class ${(i as any).name}${(i as any).superClass ? ` extends ${(i as any).superClass}` : ''}`;
+    case 'Assignment':
+      return `${(i as any).left} ${(i as any).operator} ${(i as any).right}`;
+    case 'Update':
+      return `${(i as any).operator}${(i as any).argument}`;
+    case 'Return':
+      return `return ${(i as any).value ?? ''}`.trim();
+    case 'Throw':
+      return `throw ${(i as any).value ?? ''}`.trim();
+    case 'TryCatch':
+      return `try${(i as any).hasCatch ? '/catch' : ''}${(i as any).hasFinally ? '/finally' : ''}`;
   }
 }
 
@@ -34,6 +70,10 @@ function badgeColor(type: Insight['type']) {
     case 'FunctionDefinition': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300';
     case 'FunctionCall': return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300';
     case 'Variable': return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300';
+    case 'Class': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300';
+    case 'Import': return 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300';
+    case 'Export': return 'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-900/30 dark:text-fuchsia-300';
+    case 'Assignment': return 'bg-slate-100 text-slate-700 dark:bg-slate-700/50 dark:text-slate-200';
     default: return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
   }
 }
@@ -76,7 +116,10 @@ export default function InsightTable({ insights }: Props) {
               <div className="insight-title">{describe(i)}</div>
               <div className="insight-sub">
                 <span className="mr-3">Context: <span className="font-medium">{i.context}</span></span>
-                <span>Line: <span className="font-medium">{i.location ? i.location.line : '-'}</span></span>
+                <span className="mr-3">Line: <span className="font-medium">{i.location ? i.location.line : '-'}</span></span>
+                {('span' in i && i.span && (i as any).span?.lines) ? (
+                  <span>Span: <span className="font-medium">{(i as any).span.lines} lines</span></span>
+                ) : null}
               </div>
             </div>
           </div>

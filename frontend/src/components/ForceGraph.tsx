@@ -4,60 +4,162 @@ import * as d3 from 'd3';
 import { Insight } from '../types';
 import { ThemeContext } from '../theme/ThemeContext';
 
-type Node = { id: string; label?: string };
-type Link = { source: string; target: string };
+type GraphNode = { id: string; label: string; group: string; r?: number; meta?: any };
+type GraphLink = { source: string; target: string; type: string };
 type Props = { insights: Insight[] };
 
-function buildGraph(insights: Insight[]): { nodes: Node[]; links: Link[] } {
-  const nodesMap = new Map<string, Node>();
-  const links: Link[] = [];
+function safeId(text: string) {
+  return text.replace(/\s+/g, '_');
+}
 
-  function ensureNode(id: string, label: string) {
-    if (!nodesMap.has(id)) nodesMap.set(id, { id, label });
+function buildGraph(insights: Insight[]): { nodes: GraphNode[]; links: GraphLink[] } {
+  const nodesMap = new Map<string, GraphNode>();
+  const links: GraphLink[] = [];
+
+  function ensureNode(id: string, label: string, group: string, meta?: any): GraphNode {
+    const existing = nodesMap.get(id);
+    if (existing) return existing;
+    const node: GraphNode = { id, label, group, meta };
+    nodesMap.set(id, node);
+    return node;
   }
 
-  ensureNode('ctx:global', 'global');
+  function link(a: string, b: string, type: string) {
+    links.push({ source: a, target: b, type });
+  }
+
+  // Always have global context
+  ensureNode('ctx:global', 'global', 'context');
+
+  function ctxId(ctx: string) {
+    return `ctx:${ctx || 'global'}`;
+  }
+
+  // Pre-create contexts from insights
+  for (const ins of insights) {
+    ensureNode(ctxId((ins as any).context || 'global'), (ins as any).context || 'global', 'context');
+  }
 
   insights.forEach((ins, idx) => {
-    const ctxId = `ctx:${(ins as any).context || 'global'}`;
-    ensureNode(ctxId, (ins as any).context || 'global');
+    const ctx = (ins as any).context || 'global';
+    const parentCtxId = ctxId(ctx);
 
-    const insId = `ins:${idx}`;
-    let label = 'node';
     switch (ins.type) {
-      case 'Variable':
-        label = `var ${(ins as any).name ?? 'unknown'}${(ins as any).init ? ` = ${(ins as any).init}` : ''}`;
+      case 'Variable': {
+        const name = (ins as any).name || `var_${idx}`;
+        const id = `var:${safeId(name)}`;
+        ensureNode(id, `var ${name}${(ins as any).init ? ` = ${(ins as any).init}` : ''}`, 'variable', ins);
+        link(parentCtxId, id, 'contains');
         break;
-      case 'FunctionDefinition':
-        label = `function ${(ins as any).name}(${(ins as any).params.join(', ')})`;
+      }
+      case 'FunctionDefinition': {
+        const name = (ins as any).name || `fn_${idx}`;
+        const params = (ins as any).params || [];
+        const id = `fn:${safeId(name)}`;
+        const node = ensureNode(id, `fn ${name}(${params.join(', ')})`, 'function', ins);
+        // Scale radius by cyclomatic complexity if available
+        const cyclo = ins && (ins as any).metrics?.cyclomatic ? (ins as any).metrics.cyclomatic : 1;
+        node.r = Math.max(18, Math.min(40, 14 + cyclo * 2));
+        link(parentCtxId, id, 'contains');
+        // Create dedicated function context node
+        const fnCtxId = ctxId(name);
+        ensureNode(fnCtxId, name, 'context');
+        link(id, fnCtxId, 'defines');
         break;
-      case 'FunctionCall':
-        label = `call ${(ins as any).callee}(${(ins as any).args.join(', ')})`;
+      }
+      case 'FunctionCall': {
+        const callee = (ins as any).callee || 'unknown';
+        const callId = `call:${idx}`;
+        ensureNode(callId, `call ${callee}(${((ins as any).args || []).join(', ')})`, 'call', ins);
+        link(parentCtxId, callId, 'calls');
+        const calleeId = `sym:${safeId(callee)}`;
+        ensureNode(calleeId, callee, 'symbol');
+        link(callId, calleeId, 'targets');
         break;
-      case 'BinaryExpression':
-        label = `binary ${(ins as any).operator}`;
+      }
+      case 'Import': {
+        const source = (ins as any).source || '?';
+        const modId = `mod:${safeId(source)}`;
+        ensureNode(modId, `module ${source}`, 'module', ins);
+        link(parentCtxId, modId, 'imports');
+        const specs = (ins as any).specifiers || [];
+        specs.forEach((s: any, sIdx: number) => {
+          if (!s || !s.local) return;
+          const localId = `sym:${safeId(s.local)}`;
+          ensureNode(localId, s.local, 'symbol');
+          link(modId, localId, 'binds');
+        });
         break;
-      case 'Identifier':
-        label = `id ${(ins as any).name}`;
+      }
+      case 'Export': {
+        const names = (ins as any).names || [];
+        const expId = `exp:${idx}`;
+        ensureNode(expId, `export ${names.join(', ') || (ins as any).exportKind || 'default'}`, 'export', ins);
+        link(parentCtxId, expId, 'exports');
         break;
-      case 'StringLiteral':
-        label = `"${(ins as any).value}"`;
+      }
+      case 'Class': {
+        const name = (ins as any).name || `Class_${idx}`;
+        const id = `class:${safeId(name)}`;
+        ensureNode(id, `class ${name}`, 'class', ins);
+        link(parentCtxId, id, 'contains');
+        const superClass = (ins as any).superClass;
+        if (superClass) {
+          const superId = `sym:${safeId(superClass)}`;
+          ensureNode(superId, superClass, 'symbol');
+          link(id, superId, 'extends');
+        }
         break;
-    }
-    ensureNode(insId, label);
-    links.push({ source: ctxId, target: insId });
-
-    if (ins.type === 'FunctionDefinition') {
-      const fnCtxId = `ctx:${(ins as any).name || 'anonymous'}`;
-      ensureNode(fnCtxId, (ins as any).name || 'anonymous');
-      links.push({ source: insId, target: fnCtxId });
-    }
-    if (ins.type === 'FunctionCall') {
-      const calleeId = `callee:${(ins as any).callee}`;
-      ensureNode(calleeId, (ins as any).callee);
-      links.push({ source: insId, target: calleeId });
+      }
+      case 'Assignment': {
+        const aid = `assign:${idx}`;
+        ensureNode(aid, `assign ${(ins as any).left} ${(ins as any).operator} ${(ins as any).right}`, 'assignment', ins);
+        link(parentCtxId, aid, 'assign');
+        const leftId = `sym:${safeId((ins as any).left || 'lhs')}`;
+        ensureNode(leftId, (ins as any).left || 'lhs', 'symbol');
+        link(aid, leftId, 'writes');
+        const rightExpr = (ins as any).right || 'expr';
+        const rightId = `expr:${idx}`;
+        ensureNode(rightId, rightExpr, 'expression');
+        link(aid, rightId, 'reads');
+        break;
+      }
+      case 'Update': {
+        const uid = `update:${idx}`;
+        ensureNode(uid, `update ${(ins as any).operator}${(ins as any).argument}`, 'assignment', ins);
+        link(parentCtxId, uid, 'update');
+        const argId = `sym:${safeId((ins as any).argument || 'arg')}`;
+        ensureNode(argId, (ins as any).argument || 'arg', 'symbol');
+        link(uid, argId, 'writes');
+        break;
+      }
+      case 'Return': {
+        const rid = `return:${idx}`;
+        ensureNode(rid, `return ${(ins as any).value ?? ''}`.trim(), 'control', ins);
+        link(parentCtxId, rid, 'return');
+        break;
+      }
+      case 'Throw': {
+        const tid = `throw:${idx}`;
+        ensureNode(tid, `throw ${(ins as any).value ?? ''}`.trim(), 'control', ins);
+        link(parentCtxId, tid, 'throw');
+        break;
+      }
+      case 'TryCatch': {
+        const tcid = `trycatch:${idx}`;
+        ensureNode(tcid, `try${(ins as any).hasCatch ? '/catch' : ''}${(ins as any).hasFinally ? '/finally' : ''}` , 'control', ins);
+        link(parentCtxId, tcid, 'try');
+        break;
+      }
+      default: {
+        // For other literals/identifiers keep a lightweight node
+        const id = `ins:${idx}`;
+        ensureNode(id, (ins as any).type.toLowerCase(), 'literal', ins);
+        link(parentCtxId, id, 'contains');
+      }
     }
   });
+
   return { nodes: Array.from(nodesMap.values()), links };
 }
 
@@ -67,108 +169,212 @@ const ForceGraph: React.FC<Props> = ({ insights }) => {
   const { nodes, links } = buildGraph(insights);
 
   useEffect(() => {
-    const svg = d3.select(svgRef.current);
+    const svg = d3.select<SVGSVGElement, unknown>(svgRef.current as SVGSVGElement);
     svg.selectAll('*').remove();
-    const width = 900;
-    const height = 600;
+    const width = (svgRef.current?.parentElement?.clientWidth || 900);
+    const height = Math.max(400, Math.min(720, (svgRef.current?.parentElement?.clientHeight || 600)));
     svg.attr('width', width).attr('height', height);
+
     const themeColors: any = {
       dark: {
         background: '#0b1220',
-        node: '#3b82f6',
-        nodeStroke: '#fff',
-        link: '#6366f1',
-        label: '#f3f4f6',
-        shadow: 'rgba(0,0,0,0.4)',
+        label: '#e5e7eb',
+        groups: {
+          context: '#6366f1',
+          function: '#22c55e',
+          variable: '#0ea5e9',
+          call: '#f43f5e',
+          symbol: '#eab308',
+          module: '#06b6d4',
+          export: '#d946ef',
+          class: '#f59e0b',
+          assignment: '#94a3b8',
+          expression: '#a78bfa',
+          control: '#ef4444',
+          literal: '#64748b',
+        },
+        links: {
+          contains: '#64748b',
+          defines: '#10b981',
+          calls: '#ef4444',
+          targets: '#f43f5e',
+          imports: '#06b6d4',
+          binds: '#22d3ee',
+          exports: '#d946ef',
+          extends: '#f59e0b',
+          assign: '#94a3b8',
+          reads: '#a78bfa',
+          writes: '#f59e0b',
+          return: '#22c55e',
+          throw: '#ef4444',
+          try: '#f97316',
+          update: '#cbd5e1',
+        },
       },
       light: {
         background: '#f8fafc',
-        node: '#6366f1',
-        nodeStroke: '#18181b',
-        link: '#3b82f6',
-        label: '#18181b',
-        shadow: 'rgba(0,0,0,0.1)',
+        label: '#0f172a',
+        groups: {
+          context: '#4f46e5',
+          function: '#16a34a',
+          variable: '#0284c7',
+          call: '#dc2626',
+          symbol: '#a16207',
+          module: '#0891b2',
+          export: '#a21caf',
+          class: '#d97706',
+          assignment: '#64748b',
+          expression: '#7c3aed',
+          control: '#b91c1c',
+          literal: '#6b7280',
+        },
+        links: {
+          contains: '#94a3b8',
+          defines: '#16a34a',
+          calls: '#b91c1c',
+          targets: '#dc2626',
+          imports: '#0891b2',
+          binds: '#06b6d4',
+          exports: '#a21caf',
+          extends: '#d97706',
+          assign: '#64748b',
+          reads: '#7c3aed',
+          writes: '#d97706',
+          return: '#16a34a',
+          throw: '#b91c1c',
+          try: '#ea580c',
+          update: '#64748b',
+        },
       },
       vibrant: {
-        background: 'linear-gradient(135deg, #f43f5e 0%, #3b82f6 100%)',
-        node: '#facc15',
-        nodeStroke: '#fff',
-        link: '#f43f5e',
+        background: 'linear-gradient(135deg, #0ea5e9 0%, #8b5cf6 100%)',
         label: '#fff',
-        shadow: 'rgba(0,0,0,0.3)',
+        groups: {
+          context: '#fff',
+          function: '#34d399',
+          variable: '#93c5fd',
+          call: '#fecaca',
+          symbol: '#fde68a',
+          module: '#67e8f9',
+          export: '#f5d0fe',
+          class: '#fdba74',
+          assignment: '#e5e7eb',
+          expression: '#ddd6fe',
+          control: '#fecaca',
+          literal: '#e5e7eb',
+        },
+        links: {
+          contains: '#e5e7eb',
+          defines: '#34d399',
+          calls: '#fecaca',
+          targets: '#fecaca',
+          imports: '#67e8f9',
+          binds: '#a5f3fc',
+          exports: '#f5d0fe',
+          extends: '#fdba74',
+          assign: '#e5e7eb',
+          reads: '#ddd6fe',
+          writes: '#fde68a',
+          return: '#bbf7d0',
+          throw: '#fecaca',
+          try: '#fed7aa',
+          update: '#e2e8f0',
+        },
       },
     };
-    const colors = themeColors[theme] || themeColors.dark;
-    svg.style('background', colors.background);
-    const simulation = d3.forceSimulation(nodes as any)
-      .force('link', d3.forceLink(links as any).id((d: any) => d.id).distance(120))
-      .force('charge', d3.forceManyBody().strength(-400))
+
+    const palette = themeColors[theme] || themeColors.dark;
+    const groupColor = (g: string) => (palette.groups && palette.groups[g]) || '#3b82f6';
+    const linkColor = (t: string) => (palette.links && palette.links[t]) || '#94a3b8';
+
+    svg.style('background', palette.background);
+
+    // define zoom/pan
+    const container = svg.append('g');
+    svg.call(d3.zoom<SVGSVGElement, unknown>().scaleExtent([0.3, 2]).on('zoom', (event) => {
+      container.attr('transform', event.transform);
+    }));
+
+    // Arrowheads
+    svg.append('defs').html(`
+      <marker id="arrow" viewBox="0 -5 10 10" refX="12" refY="0" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M0,-5L10,0L0,5" fill="#94a3b8"></path>
+      </marker>
+    `);
+
+    const sim = d3.forceSimulation(nodes as any)
+      .force('link', d3.forceLink(links as any).id((d: any) => d.id).distance((l: any) => {
+        const t = l.type;
+        if (t === 'defines') return 60;
+        if (t === 'calls' || t === 'targets') return 120;
+        if (t === 'imports' || t === 'exports') return 140;
+        return 90;
+      }))
+      .force('charge', d3.forceManyBody().strength(-420))
+      .force('collide', d3.forceCollide().radius((d: any) => (d.r ? d.r + 6 : 26)))
       .force('center', d3.forceCenter(width / 2, height / 2));
-    const link = svg.append('g')
-      .attr('stroke', colors.link)
-      .attr('stroke-opacity', 0.7)
+
+    const link = container.append('g')
+      .attr('stroke-opacity', 0.8)
       .selectAll('line')
       .data(links)
       .enter().append('line')
-      .attr('stroke-width', 3)
-      .attr('filter', 'url(#linkShadow)');
-    const node = svg.append('g')
-      .attr('stroke', colors.nodeStroke)
       .attr('stroke-width', 2)
+      .attr('stroke', (d: any) => linkColor(d.type))
+      .attr('marker-end', 'url(#arrow)');
+
+    const node = container.append('g')
       .selectAll('circle')
       .data(nodes)
-      .enter().append('circle')
-      .attr('r', 24)
-      .attr('fill', colors.node)
-      .attr('filter', 'url(#nodeShadow)')
+      .enter()
+      .append('circle')
+      .attr('r', (d: any) => d.r || 22)
+      .attr('fill', (d: any) => groupColor(d.group))
+      .attr('stroke', theme === 'dark' ? '#0b1220' : '#0f172a')
+      .attr('stroke-width', 2)
       .style('cursor', 'pointer')
       .on('mouseover', function () {
-        d3.select(this).transition().duration(150).attr('r', 30).attr('fill', d3.color(colors.node)?.darker(0.5)?.toString() || colors.node);
+        d3.select(this).transition().duration(120).attr('r', (d: any) => (d.r || 22) + 6);
       })
       .on('mouseout', function () {
-        d3.select(this).transition().duration(150).attr('r', 24).attr('fill', colors.node);
+        d3.select(this).transition().duration(120).attr('r', (d: any) => d.r || 22);
       });
+
     (node as any).call(d3.drag()
       .on('start', function (event: any, d: any) {
-        if (!event.active) simulation.alphaTarget(0.3).restart();
-        d.fx = d.x;
-        d.fy = d.y;
+        if (!event.active) sim.alphaTarget(0.3).restart();
+        d.fx = d.x; d.fy = d.y;
       })
       .on('drag', function (event: any, d: any) {
-        d.fx = event.x;
-        d.fy = event.y;
+        d.fx = event.x; d.fy = event.y;
       })
       .on('end', function (event: any, d: any) {
-        if (!event.active) simulation.alphaTarget(0);
-        d.fx = null;
-        d.fy = null;
-      })
-    );
-    node.append('title').text((d: any) => d.label || d.id);
-    const label = svg.append('g')
+        if (!event.active) sim.alphaTarget(0);
+        d.fx = null; d.fy = null;
+      }));
+
+    node.append('title').text((d: any) => {
+      const meta = d.meta || {};
+      if (d.group === 'function' && meta.metrics) {
+        const m = meta.metrics;
+        return `${d.label}\nbranches:${m.branches} loops:${m.loops} calls:${m.calls} returns:${m.returns} cyclomatic:${m.cyclomatic} loc:${m.linesOfCode ?? '-'}`;
+      }
+      return d.label;
+    });
+
+    const label = container.append('g')
       .selectAll('text')
       .data(nodes)
       .enter().append('text')
-      .text((d: any) => d.label || d.id)
-      .attr('font-size', 14)
+      .text((d: any) => d.label)
+      .attr('font-size', 12)
       .attr('font-weight', '600')
-      .attr('fill', colors.label)
+      .attr('fill', palette.label)
       .attr('text-anchor', 'middle')
-      .attr('dy', 6)
-      .attr('pointer-events', 'none')
-      .attr('filter', 'url(#labelShadow)');
-    svg.append('defs').html(`
-      <filter id="nodeShadow" x="-20%" y="-20%" width="140%" height="140%">
-        <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="${colors.shadow}" />
-      </filter>
-      <filter id="linkShadow" x="-20%" y="-20%" width="140%" height="140%">
-        <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="${colors.shadow}" />
-      </filter>
-      <filter id="labelShadow" x="-20%" y="-20%" width="140%" height="140%">
-        <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="${colors.shadow}" />
-      </filter>
-    `);
-    simulation.on('tick', () => {
+      .attr('dy', 4)
+      .attr('pointer-events', 'none');
+
+    sim.on('tick', () => {
       link
         .attr('x1', (d: any) => d.source.x)
         .attr('y1', (d: any) => d.source.y)
@@ -179,7 +385,7 @@ const ForceGraph: React.FC<Props> = ({ insights }) => {
         .attr('cy', (d: any) => d.y);
       label
         .attr('x', (d: any) => d.x)
-        .attr('y', (d: any) => d.y);
+        .attr('y', (d: any) => d.y + ((d.r || 22) + 14));
     });
   }, [nodes, links, theme]);
 
@@ -189,8 +395,10 @@ const ForceGraph: React.FC<Props> = ({ insights }) => {
         <h3 className="text-sm font-semibold">Graph</h3>
         <div className="legend">
           <span><span className="legend-dot ctx" /> Context</span>
-          <span><span className="legend-dot ins" /> Insight</span>
-          <span><span className="legend-dot cal" /> Callee</span>
+          <span><span className="legend-dot fn" /> Function</span>
+          <span><span className="legend-dot call" /> Call</span>
+          <span><span className="legend-dot mod" /> Module</span>
+          <span><span className="legend-dot cls" /> Class</span>
         </div>
       </div>
       <svg ref={svgRef} className="graph" />

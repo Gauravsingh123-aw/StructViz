@@ -18,6 +18,14 @@ function extractInfo(ast, sourceCode) {
     return byteOffsetToLineColumn(sourceCode, span.start);
   }
 
+  function getSpanInfo(span) {
+    if (!span || typeof span.start !== 'number' || typeof span.end !== 'number') return null;
+    const start = byteOffsetToLineColumn(sourceCode, span.start);
+    const end = byteOffsetToLineColumn(sourceCode, span.end);
+    const lines = Math.max(1, end.line - start.line + 1);
+    return { start, end, lines };
+  }
+
   function getPropertyName(prop) {
     if (!prop || typeof prop !== 'object') return 'unknown';
     if (prop.type === 'Identifier') return prop.value;
@@ -189,7 +197,21 @@ function extractInfo(ast, sourceCode) {
       }
     }
     if (node.body) walkBody(node.body);
-    return metrics;
+    const span = getSpanInfo(node.span);
+    const cyclomatic = 1 + metrics.branches + metrics.loops;
+    return { ...metrics, cyclomatic, linesOfCode: span ? span.lines : undefined };
+  }
+
+  function describeLeft(left) {
+    if (!left || typeof left !== 'object') return 'unknown';
+    if (left.type === 'Identifier') return left.value;
+    if (left.type === 'MemberExpression') return `${describeExpression(left.object)}.${getPropertyName(left.property)}`;
+    if (left.type === 'ArrayPattern' || left.type === 'ObjectPattern') return describePattern(left);
+    return left.type || 'unknown';
+  }
+
+  function push(insight) {
+    insights.push({ scopeDepth: contextStack.length, span: getSpanInfo(insight.__span), ...insight });
   }
 
   function walk(n) {
@@ -209,12 +231,13 @@ function extractInfo(ast, sourceCode) {
             context: currentContext(),
             location: getLocation(n.span),
             kind: n.kind || undefined,
+            __span: n.span,
           };
           if (initType === "ArrowFunctionExpression") {
             info.params = (initNode.params || []).map(paramName);
             info.isAsync = !!initNode.async;
           }
-          insights.push(info);
+          push(info);
         });
         break;
 
@@ -224,7 +247,7 @@ function extractInfo(ast, sourceCode) {
         const funcName = getFunctionName(n);
         const params = (n.params || []).map(paramName);
         const metrics = computeFunctionMetrics(n);
-        insights.push({
+        push({
           type: "FunctionDefinition",
           name: funcName,
           params,
@@ -233,6 +256,7 @@ function extractInfo(ast, sourceCode) {
           metrics,
           async: !!n.async,
           generator: !!n.generator,
+          __span: n.span,
         });
         contextStack.push(funcName);
         break;
@@ -240,45 +264,221 @@ function extractInfo(ast, sourceCode) {
 
       case "CallExpression": {
         const argsDesc = (n.arguments || []).map(a => describeArgument(a));
-        insights.push({
+        push({
           type: "FunctionCall",
           callee: getCalleeName(n.callee),
           args: argsDesc,
           context: currentContext(),
           location: getLocation(n.span),
           argumentCount: argsDesc.length,
+          __span: n.span,
+        });
+        break;
+      }
+
+      case "NewExpression": {
+        const argsDesc = (n.arguments || []).map(a => describeArgument(a));
+        push({
+          type: "FunctionCall",
+          callee: `new ${getCalleeName(n.callee)}`,
+          args: argsDesc,
+          context: currentContext(),
+          location: getLocation(n.span),
+          argumentCount: argsDesc.length,
+          __span: n.span,
         });
         break;
       }
 
       case "BinaryExpression":
-        insights.push({
+        push({
           type: "BinaryExpression",
           operator: n.operator,
           left: describeExpression(n.left),
           right: describeExpression(n.right),
           context: currentContext(),
           location: getLocation(n.span),
+          __span: n.span,
+        });
+        break;
+
+      case "AssignmentExpression":
+        push({
+          type: "Assignment",
+          operator: n.operator,
+          left: describeLeft(n.left),
+          right: describeExpression(n.right),
+          context: currentContext(),
+          location: getLocation(n.span),
+          __span: n.span,
+        });
+        break;
+
+      case "UpdateExpression":
+        push({
+          type: "Update",
+          operator: n.operator,
+          argument: describeExpression(n.argument),
+          prefix: !!n.prefix,
+          context: currentContext(),
+          location: getLocation(n.span),
+          __span: n.span,
+        });
+        break;
+
+      case "ReturnStatement":
+        push({
+          type: "Return",
+          value: n.argument ? describeExpression(n.argument) : undefined,
+          context: currentContext(),
+          location: getLocation(n.span),
+          __span: n.span,
+        });
+        break;
+
+      case "ThrowStatement":
+        push({
+          type: "Throw",
+          value: n.argument ? describeExpression(n.argument) : undefined,
+          context: currentContext(),
+          location: getLocation(n.span),
+          __span: n.span,
+        });
+        break;
+
+      case "TryStatement":
+        push({
+          type: "TryCatch",
+          hasCatch: !!n.handler,
+          hasFinally: !!n.finalizer,
+          context: currentContext(),
+          location: getLocation(n.span),
+          __span: n.span,
         });
         break;
 
       case "Identifier":
-        insights.push({
+        push({
           type: "Identifier",
           name: n.value,
           context: currentContext(),
           location: getLocation(n.span),
+          __span: n.span,
         });
         break;
 
       case "StringLiteral":
-        insights.push({
+        push({
           type: "StringLiteral",
           value: n.value,
           context: currentContext(),
           location: getLocation(n.span),
+          __span: n.span,
         });
         break;
+
+      case "BooleanLiteral":
+        push({
+          type: "BooleanLiteral",
+          value: n.value,
+          context: currentContext(),
+          location: getLocation(n.span),
+          __span: n.span,
+        });
+        break;
+
+      case "NumericLiteral":
+        push({
+          type: "NumericLiteral",
+          value: n.value,
+          context: currentContext(),
+          location: getLocation(n.span),
+          __span: n.span,
+        });
+        break;
+
+      case "NullLiteral":
+        push({
+          type: "NullLiteral",
+          value: null,
+          context: currentContext(),
+          location: getLocation(n.span),
+          __span: n.span,
+        });
+        break;
+
+      case "TemplateLiteral":
+        push({
+          type: "TemplateLiteral",
+          parts: (n.quasis || []).map(q => q.cooked),
+          expressions: (n.expressions || []).map(e => describeExpression(e)),
+          context: currentContext(),
+          location: getLocation(n.span),
+          __span: n.span,
+        });
+        break;
+
+      case "ImportDeclaration": {
+        const specs = (n.specifiers || []).map(s => {
+          if (s.type === 'ImportDefaultSpecifier') return { kind: 'default', local: s.local?.value };
+          if (s.type === 'ImportNamespaceSpecifier') return { kind: 'namespace', local: s.local?.value };
+          if (s.type === 'ImportSpecifier') return { kind: 'named', imported: s.imported?.value || s.imported?.name, local: s.local?.value };
+          return { kind: 'unknown' };
+        });
+        push({
+          type: "Import",
+          source: n.source?.value,
+          specifiers: specs,
+          context: currentContext(),
+          location: getLocation(n.span),
+          __span: n.span,
+        });
+        break;
+      }
+
+      case "ExportDefaultDeclaration":
+      case "ExportDefaultExpression":
+      case "ExportDeclaration":
+      case "ExportNamedDeclaration":
+      case "ExportAllDeclaration": {
+        const kind = n.type.replace('Declaration', '').replace('Expression', 'Expression');
+        let names = [];
+        if (n.declaration && n.declaration.id) names.push(n.declaration.id.value || n.declaration.id.name);
+        if (Array.isArray(n.specifiers)) names = names.concat(n.specifiers.map(s => s.exported?.value || s.orig?.value || s.local?.value).filter(Boolean));
+        push({
+          type: "Export",
+          exportKind: kind,
+          names,
+          source: n.source?.value,
+          context: currentContext(),
+          location: getLocation(n.span),
+          __span: n.span,
+        });
+        break;
+      }
+
+      case "ClassDeclaration":
+      case "ClassExpression": {
+        const name = getFunctionName(n);
+        const superClass = n.superClass ? describeExpression(n.superClass) : undefined;
+        const methods = [];
+        (n.body?.body || []).forEach(m => {
+          if (m.type === 'MethodProperty' || m.type === 'ClassMethod') {
+            methods.push({ name: getPropertyName(m.key), kind: m.kind || 'method', static: !!m.isStatic, async: !!m.isAsync, generator: !!m.isGenerator });
+          }
+        });
+        push({
+          type: 'Class',
+          name,
+          superClass,
+          methods,
+          context: currentContext(),
+          location: getLocation(n.span),
+          __span: n.span,
+        });
+        contextStack.push(name);
+        break;
+      }
 
       default:
         for (const key in n) {
@@ -291,7 +491,7 @@ function extractInfo(ast, sourceCode) {
         }
     }
 
-    if (["FunctionDeclaration", "ArrowFunctionExpression", "FunctionExpression"].includes(n.type)) {
+    if (["FunctionDeclaration", "ArrowFunctionExpression", "FunctionExpression", "ClassDeclaration", "ClassExpression"].includes(n.type)) {
       contextStack.pop();
     }
   }
