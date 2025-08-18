@@ -21,11 +21,11 @@ html, body, #root { height: 100%; }
 **************************/
 
 .container-app {
-  @apply grid grid-cols-[460px,1fr] gap-6 h-screen p-6 bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100;
+  @apply grid grid-cols-[460px,1fr,360px] gap-6 h-screen p-6 bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100;
 }
 
 .topbar {
-  @apply col-span-2 -mt-2 -mx-2 mb-2 flex items-center justify-between px-2;
+  @apply col-span-3 -mt-2 -mx-2 mb-2 flex items-center justify-between px-2;
 }
 
 .brand {

@@ -74,7 +74,7 @@ const ForceGraph: React.FC<Props> = ({ insights }) => {
     svg.attr('width', width).attr('height', height);
     const themeColors: any = {
       dark: {
-        background: '#18181b',
+        background: '#0b1220',
         node: '#3b82f6',
         nodeStroke: '#fff',
         link: '#6366f1',
@@ -82,7 +82,7 @@ const ForceGraph: React.FC<Props> = ({ insights }) => {
         shadow: 'rgba(0,0,0,0.4)',
       },
       light: {
-        background: '#f3f4f6',
+        background: '#f8fafc',
         node: '#6366f1',
         nodeStroke: '#18181b',
         link: '#3b82f6',
@@ -150,8 +150,8 @@ const ForceGraph: React.FC<Props> = ({ insights }) => {
       .data(nodes)
       .enter().append('text')
       .text((d: any) => d.label || d.id)
-      .attr('font-size', 16)
-      .attr('font-weight', 'bold')
+      .attr('font-size', 14)
+      .attr('font-weight', '600')
       .attr('fill', colors.label)
       .attr('text-anchor', 'middle')
       .attr('dy', 6)
@@ -184,14 +184,16 @@ const ForceGraph: React.FC<Props> = ({ insights }) => {
   }, [nodes, links, theme]);
 
   return (
-    <div style={{ width: '100%', height: '600px', borderRadius: 20, boxShadow: '0 4px 32px #0004', overflow: 'hidden', background: 'transparent', position: 'relative' }}>
-      <svg ref={svgRef} style={{ width: '100%', height: '600px', display: 'block' }} />
-      {/* Legend */}
-      <div style={{ position: 'absolute', bottom: 16, right: 24, background: '#222a', color: '#fff', padding: '8px 16px', borderRadius: 12, fontSize: 14, boxShadow: '0 2px 8px #0002' }}>
-        <b>AST Node</b>: Circle<br />
-        <b>Edge</b>: Relationship<br />
-        <span style={{ fontSize: 12, opacity: 0.7 }}>Theme: {theme.charAt(0).toUpperCase() + theme.slice(1)}</span>
+    <div className="card" style={{ overflow: 'hidden' }}>
+      <div className="card-header">
+        <h3 className="text-sm font-semibold">Graph</h3>
+        <div className="legend">
+          <span><span className="legend-dot ctx" /> Context</span>
+          <span><span className="legend-dot ins" /> Insight</span>
+          <span><span className="legend-dot cal" /> Callee</span>
+        </div>
       </div>
+      <svg ref={svgRef} className="graph" />
     </div>
   );
 };

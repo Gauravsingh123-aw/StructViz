@@ -40,11 +40,16 @@ function App() {
 
   return (
     <ThemeProvider>
-      <div className="App">
+      <div className="container-app">
         <Topbar />
-        <div style={{ display: 'flex', flexDirection: 'row', gap: 24, marginTop: 24 }}>
+        <div className="space-y-4">
           <Editor value={code} onChange={setCode} onSubmit={onSubmit} loading={loading} />
+          {error && <div className="error">{error}</div>}
+        </div>
+        <div className="content flex flex-col gap-4">
           <ForceGraph insights={insights} />
+        </div>
+        <div className="space-y-4">
           <InsightTable insights={insights} />
         </div>
       </div>
