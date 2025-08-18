@@ -1,6 +1,6 @@
 import { ApiResponse } from './types';
 
-const BASE_URL = 'http://localhost:4000';
+const BASE_URL = 'https://struct-viz.vercel.app';
 
 export async function convertCodeToInsights(code: string): Promise<ApiResponse> {
   const res = await fetch(`${BASE_URL}/swc-app/convert`, {
