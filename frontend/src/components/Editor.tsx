@@ -9,7 +9,7 @@ type Props = {
 
 export default function Editor({ value, onChange, onSubmit, loading }: Props) {
   return (
-    <div className="card">
+    <div className="card flex flex-col" style={{ height: 420 }}>
       <div className="card-header">
         <h3>JavaScript Source</h3>
         <button className="primary" onClick={onSubmit} disabled={loading}>
@@ -17,11 +17,12 @@ export default function Editor({ value, onChange, onSubmit, loading }: Props) {
         </button>
       </div>
       <textarea
-        className="editor"
+        className="editor resize-none flex-1"
         spellCheck={false}
         placeholder="Paste or type JavaScript/JSX code here…"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        style={{ minHeight: 0 }}
       />
       <div className="hint">Backend: POST text/plain to /swc-app/convert</div>
     </div>

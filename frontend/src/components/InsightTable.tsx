@@ -27,7 +27,7 @@ const TYPES: Insight['type'][] = [
 function describe(i: Insight) {
   switch (i.type) {
     case 'Variable':
-      return `${i.name ?? 'unknown'}${(i as any).init ? ` = ${(i as any).init}` : ''}`;
+      return `${(i as any).name ?? 'unknown'}${(i as any).init ? ` = ${(i as any).init}` : ''}`;
     case 'FunctionDefinition':
       return `${(i as any).name}(${(i as any).params.join(', ')})`;
     case 'FunctionCall':
@@ -93,9 +93,9 @@ export default function InsightTable({ insights }: Props) {
   }
 
   return (
-    <div className="card">
+    <div className="card flex flex-col" style={{ height: 420 }}>
       <div className="card-header">
-        <h3 className="text-sm font-semibold">Insights</h3>
+        <h3 className="text-sm font-extrabold tracking-tight">Insights</h3>
         <div className="filters">
           {TYPES.map((t) => (
             <button
@@ -108,12 +108,12 @@ export default function InsightTable({ insights }: Props) {
           ))}
         </div>
       </div>
-      <div className="insights-wrap">
+      <div className="insights-wrap flex-1" style={{ overflowY: 'auto', minHeight: 0 }}>
         {filtered.map((i, idx) => (
           <div key={idx} className="insight-card">
             <div className={`insight-badge ${badgeColor(i.type)}`}>{i.type}</div>
             <div className="flex-1">
-              <div className="insight-title">{describe(i)}</div>
+              <div className="insight-title font-bold">{describe(i)}</div>
               <div className="insight-sub">
                 <span className="mr-3">Context: <span className="font-medium">{i.context}</span></span>
                 <span className="mr-3">Line: <span className="font-medium">{i.location ? i.location.line : '-'}</span></span>
