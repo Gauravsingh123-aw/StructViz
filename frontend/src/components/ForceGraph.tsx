@@ -12,7 +12,33 @@ function safeId(text: string) {
   return text.replace(/\s+/g, '_');
 }
 
+function isArchitectureInsight(insight: Insight) {
+  switch (insight.type) {
+    case 'File':
+    case 'ModuleDependency':
+    case 'EntryPoint':
+    case 'ModuleCycle':
+    case 'DeadExport':
+    case 'Hotspot':
+    case 'FunctionDefinition':
+    case 'Import':
+    case 'Export':
+    case 'Class':
+    case 'TypeAlias':
+    case 'Interface':
+    case 'Enum':
+      return true;
+    case 'FunctionCall': {
+      const callee = (insight as any).callee || '';
+      return Boolean((insight as any).targetSymbolId || callee.startsWith('this.') || callee.startsWith('super.'));
+    }
+    default:
+      return false;
+  }
+}
+
 function buildGraph(insights: Insight[]): { nodes: GraphNode[]; links: GraphLink[] } {
+  const graphInsights = insights.filter(isArchitectureInsight);
   const nodesMap = new Map<string, GraphNode>();
   const links: GraphLink[] = [];
 
@@ -45,11 +71,11 @@ function buildGraph(insights: Insight[]): { nodes: GraphNode[]; links: GraphLink
     return `ctx:${ctx || 'global'}`;
   }
 
-  for (const ins of insights) {
+  for (const ins of graphInsights) {
     ensureNode(ctxId((ins as any).context || 'global'), (ins as any).context || 'global', 'context');
   }
 
-  insights.forEach((ins, idx) => {
+  graphInsights.forEach((ins, idx) => {
     const ctx = (ins as any).context || 'global';
     const parentCtxId = ctxId(ctx);
 
@@ -482,11 +508,11 @@ const ForceGraph: React.FC<Props> = ({ insights, mode = 'default' }) => {
           <h3 className="text-sm font-semibold">Graph</h3>
           <div className="flex items-center gap-3">
             <div className="legend">
-              <span><span className="legend-dot ctx" /> Context</span>
+              <span><span className="legend-dot file" /> File</span>
               <span><span className="legend-dot fn" /> Function</span>
               <span><span className="legend-dot call" /> Call</span>
               <span><span className="legend-dot mod" /> Module</span>
-              <span><span className="legend-dot cls" /> Class</span>
+              <span><span className="legend-dot alert" /> Finding</span>
             </div>
             <div className="flex items-center gap-2">
               <button onClick={zoomOut} className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-emerald-500 text-white hover:bg-emerald-600">-</button>

@@ -17,12 +17,24 @@ export async function convertCodeToInsights(code: string): Promise<ApiResponse> 
   });
 
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(text || `Request failed with status ${res.status}`);
+    throw new Error(await responseErrorMessage(res));
   }
 
   return res.json();
 } 
+
+async function responseErrorMessage(res: Response) {
+  const text = await res.text().catch(() => '');
+  if (!text) return `Request failed with status ${res.status}`;
+
+  try {
+    const parsed = JSON.parse(text);
+    if (Array.isArray(parsed.details)) return parsed.details.join('\n');
+    return parsed.details || parsed.error || text;
+  } catch {
+    return text;
+  }
+}
 
 export async function convertProjectToInsights(files: ProjectFileInput[]): Promise<ApiResponse> {
   const res = await fetch(`${BASE_URL}/swc-app/project`, {
@@ -34,8 +46,7 @@ export async function convertProjectToInsights(files: ProjectFileInput[]): Promi
   });
 
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(text || `Request failed with status ${res.status}`);
+    throw new Error(await responseErrorMessage(res));
   }
 
   return res.json();

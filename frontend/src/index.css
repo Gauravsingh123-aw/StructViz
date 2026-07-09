@@ -48,6 +48,22 @@ html, body, #root { height: 100%; }
   @apply inline-flex items-center gap-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm px-3 py-2 transition;
 }
 
+.secondary {
+  @apply inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm px-3 py-2 transition dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
+}
+
+.segmented {
+  @apply inline-flex w-fit overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900;
+}
+
+.segmented button {
+  @apply px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800;
+}
+
+.segmented button.active {
+  @apply bg-brand-600 text-white hover:bg-brand-600;
+}
+
 .editor {
   @apply w-full min-h-[240px] resize-y bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 px-4 py-3 outline-none font-mono text-sm;
 }
@@ -55,6 +71,18 @@ html, body, #root { height: 100%; }
 .hint { @apply text-slate-500 dark:text-slate-400 text-xs px-4 py-2 border-t border-dashed border-slate-200 dark:border-slate-800; }
 
 .error { @apply bg-rose-50 border border-rose-200 text-rose-700 px-4 py-2 rounded-lg dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-200; }
+
+.file-list {
+  @apply min-h-0 overflow-y-auto p-3;
+}
+
+.file-row {
+  @apply flex items-center justify-between gap-3 border-b border-slate-100 px-2 py-2 text-xs text-slate-600 last:border-b-0 dark:border-slate-800 dark:text-slate-300;
+}
+
+.empty-state {
+  @apply flex h-full items-center justify-center px-6 text-center text-sm text-slate-500 dark:text-slate-400;
+}
 
 /* Insights emphasis */
 .insights-wrap {
@@ -89,5 +117,7 @@ html, body, #root { height: 100%; }
 .legend .call { @apply bg-rose-600; }
 .legend .mod { @apply bg-cyan-500; }
 .legend .cls { @apply bg-amber-500; }
+.legend .file { @apply bg-blue-600; }
+.legend .alert { @apply bg-orange-500; }
 
 /* Improve contrast for light and vibrant by adding dark borders on nodes handled in graph via stroke */

@@ -104,3 +104,30 @@ test("emits entry points, module cycles, dead exports, and hotspots", async () =
   assert.equal(result.meta.deadExportCount, 1);
   assert.equal(result.meta.entryPointCount, 1);
 });
+
+test("rejects unsupported project files before parsing", async () => {
+  await assert.rejects(
+    () => analyzeProject({ files: [{ path: "README.md", code: "# docs" }] }),
+    err => {
+      assert.equal(err.statusCode, 400);
+      assert.ok(err.validationErrors.some(message => message.includes("unsupported extension")));
+      return true;
+    }
+  );
+});
+
+test("rejects oversized project payloads before parsing", async () => {
+  await assert.rejects(
+    () => analyzeProject({
+      files: Array.from({ length: 101 }, (_, index) => ({
+        path: `src/file-${index}.ts`,
+        code: "export const value = 1;",
+      })),
+    }),
+    err => {
+      assert.equal(err.statusCode, 400);
+      assert.ok(err.validationErrors.some(message => message.includes("maximum is 100")));
+      return true;
+    }
+  );
+});

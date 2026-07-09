@@ -5,6 +5,10 @@ const { parseCode } = require("./swc_module.js");
 
 const EXTENSIONS = ["", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
 const INDEX_FILES = ["/index.ts", "/index.tsx", "/index.js", "/index.jsx"];
+const SUPPORTED_SOURCE_EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"]);
+const MAX_PROJECT_FILES = 100;
+const MAX_FILE_BYTES = 512 * 1024;
+const MAX_PROJECT_BYTES = 2 * 1024 * 1024;
 
 function normalizeProjectPath(filePath) {
   const normalized = path.posix.normalize(String(filePath || "").replace(/\\/g, "/"));
@@ -68,6 +72,45 @@ function normalizeFiles(payload) {
       code: typeof file.code === "string" ? file.code : file.content,
     }))
     .filter(file => file.path && typeof file.code === "string");
+}
+
+function byteLength(value) {
+  return Buffer.byteLength(value || "", "utf8");
+}
+
+function validateProjectFiles(files) {
+  const errors = [];
+
+  if (!files.length) {
+    errors.push("Project analysis requires files: [{ path, code }] or [{ path, content }]");
+  }
+
+  if (files.length > MAX_PROJECT_FILES) {
+    errors.push(`Project contains ${files.length} files; maximum is ${MAX_PROJECT_FILES}`);
+  }
+
+  const totalBytes = files.reduce((sum, file) => sum + byteLength(file.code), 0);
+  if (totalBytes > MAX_PROJECT_BYTES) {
+    errors.push(`Project contains ${totalBytes} bytes; maximum is ${MAX_PROJECT_BYTES}`);
+  }
+
+  files.forEach(file => {
+    const ext = path.posix.extname(file.path);
+    const size = byteLength(file.code);
+    if (!SUPPORTED_SOURCE_EXTENSIONS.has(ext)) {
+      errors.push(`${file.path}: unsupported extension "${ext || "none"}"`);
+    }
+    if (size > MAX_FILE_BYTES) {
+      errors.push(`${file.path}: ${size} bytes exceeds per-file maximum ${MAX_FILE_BYTES}`);
+    }
+  });
+
+  if (errors.length) {
+    const err = new Error("Project input failed validation");
+    err.statusCode = 400;
+    err.validationErrors = errors;
+    throw err;
+  }
 }
 
 function exportedSymbolsForFile(insights) {
@@ -224,12 +267,7 @@ function buildProjectInsights(fileResults, dependencies, importTargetByLocalSymb
 
 async function analyzeProject(payload) {
   const files = normalizeFiles(payload);
-
-  if (!files.length) {
-    const err = new Error("Project analysis requires files: [{ path, code }] or [{ path, content }]");
-    err.statusCode = 400;
-    throw err;
-  }
+  validateProjectFiles(files);
 
   const fileMap = new Map(files.map(file => [file.path, file]));
   const fileResults = [];
@@ -332,7 +370,7 @@ async function project_module(req, res) {
     const result = await analyzeProject(req.body);
     res.send({ message: "received", payload: result.insights, meta: result.meta });
   } catch (err) {
-    res.status(err.statusCode || 400).send({ error: "Project analysis failed", details: err.parseErrors || err.message });
+    res.status(err.statusCode || 400).send({ error: "Project analysis failed", details: err.validationErrors || err.parseErrors || err.message });
   }
 }
 
@@ -341,5 +379,6 @@ module.exports = {
   findModuleCycles,
   normalizeProjectPath,
   resolveImportPath,
+  validateProjectFiles,
   project_module,
 };

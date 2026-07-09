@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { ThemeProvider } from './theme/ThemeContext';
 import Topbar from './components/Topbar';
 import Editor from './components/Editor';
+import ProjectFiles from './components/ProjectFiles';
 import ForceGraph from './components/ForceGraph';
 import InsightTable from './components/InsightTable';
 import { Insight } from './types';
-import { convertCodeToInsights } from './api';
+import { convertCodeToInsights, convertProjectToInsights, ProjectFileInput } from './api';
 import SiteHeader from './components/SiteHeader';
 import Hero from './components/Hero';
 import Features from './components/Features';
@@ -25,6 +26,8 @@ add(2, 3);
 
 function App() {
   const [code, setCode] = useState<string>(SAMPLE);
+  const [mode, setMode] = useState<'snippet' | 'project'>('snippet');
+  const [projectFiles, setProjectFiles] = useState<ProjectFileInput[]>([]);
   const [insights, setInsights] = useState<Insight[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +45,19 @@ function App() {
     }
   }
 
+  async function onProjectSubmit() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await convertProjectToInsights(projectFiles);
+      setInsights(res.payload || []);
+    } catch (e: any) {
+      setError(e.message || 'Failed to analyze project');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <ThemeProvider>
       <div className="min-h-screen bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
@@ -51,9 +67,17 @@ function App() {
         <section id="playground" className="max-w-7xl mx-auto px-4 py-10">
           <Topbar />
           <div className="grid gap-6">
+            <div className="segmented">
+              <button className={mode === 'snippet' ? 'active' : ''} onClick={() => setMode('snippet')}>Snippet</button>
+              <button className={mode === 'project' ? 'active' : ''} onClick={() => setMode('project')}>Project</button>
+            </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="space-y-4">
-                <Editor value={code} onChange={setCode} onSubmit={onSubmit} loading={loading} />
+                {mode === 'snippet' ? (
+                  <Editor value={code} onChange={setCode} onSubmit={onSubmit} loading={loading} />
+                ) : (
+                  <ProjectFiles files={projectFiles} onFiles={setProjectFiles} onSubmit={onProjectSubmit} loading={loading} />
+                )}
                 {error && <div className="error">{error}</div>}
               </div>
               <div className="space-y-4">
