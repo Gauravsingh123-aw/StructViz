@@ -11,8 +11,32 @@ export type SpanInfo = {
 
 export type Insight =
   | {
+      type: "File";
+      path: string;
+      moduleId?: string;
+      parser?: string;
+      context: string;
+      location: Location;
+      span?: SpanInfo;
+      scopeDepth?: number;
+    }
+  | {
+      type: "ModuleDependency";
+      from: string;
+      to?: string | null;
+      source: string;
+      resolved?: boolean;
+      external?: boolean;
+      context: string;
+      location: Location;
+      span?: SpanInfo;
+      scopeDepth?: number;
+    }
+  | {
       type: "Variable";
       name?: string;
+      filePath?: string;
+      moduleId?: string;
       symbolId?: string;
       symbolKind?: string;
       init?: string;
@@ -42,6 +66,7 @@ export type Insight =
       callee: string;
       targetSymbolId?: string;
       targetSymbolKind?: string;
+      localTargetSymbolId?: string;
       args: string[];
       context: string;
       location: Location;
@@ -64,6 +89,7 @@ export type Insight =
       name: string;
       resolvedSymbolId?: string;
       resolvedSymbolKind?: string;
+      localResolvedSymbolId?: string;
       context: string;
       location: Location;
       span?: SpanInfo;
@@ -230,6 +256,8 @@ export type ApiResponse = {
   meta?: {
     parser?: string;
     insightCount?: number;
+    fileCount?: number;
+    dependencyCount?: number;
   };
 };
 

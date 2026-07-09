@@ -318,10 +318,22 @@ function extractInfo(ast, sourceCode) {
       statement?.type === "ExportDefaultDeclaration" ||
       statement?.type === "ExportNamedDeclaration"
     ) {
-      return statement.declaration;
+      return statement.declaration || statement.decl || statement.expression;
     }
 
     return null;
+  }
+
+  function exportedNamesFromDeclaration(declaration) {
+    if (!declaration) return [];
+    if (declaration.type === "VariableDeclaration") {
+      return (declaration.declarations || [])
+        .map(item => item.id?.value || (item.id?.type ? describePattern(item.id) : null))
+        .filter(Boolean);
+    }
+
+    const name = getFunctionName(declaration, null);
+    return name ? [name] : [];
   }
 
   function predeclareDirectDeclarations(node) {
@@ -645,9 +657,9 @@ function extractInfo(ast, sourceCode) {
       case "ExportNamedDeclaration":
       case "ExportAllDeclaration": {
         let names = [];
-        const declaration = node.declaration;
-        const declarationName = declaration && getFunctionName(declaration, null);
-        if (declarationName) names.push(declarationName);
+        const declaration = node.declaration || node.decl || node.expression;
+        const declarationNames = exportedNamesFromDeclaration(declaration);
+        names = names.concat(declarationNames);
         if (Array.isArray(node.specifiers)) {
           names = names.concat(node.specifiers.map(specifier => (
             specifier.exported?.value ||
@@ -657,11 +669,17 @@ function extractInfo(ast, sourceCode) {
           )).filter(Boolean));
         }
         walk(declaration);
+        let symbolIds = names.map(name => resolveSymbol(name)?.id).filter(Boolean);
+        if (node.type === "ExportDefaultDeclaration" || node.type === "ExportDefaultExpression") {
+          const defaultTarget = declarationNames[0] ? resolveSymbol(declarationNames[0])?.id : null;
+          names = ["default"];
+          symbolIds = defaultTarget ? [defaultTarget] : [];
+        }
         push({
           type: "Export",
           exportKind: node.type,
           names,
-          symbolIds: names.map(name => resolveSymbol(name)?.id).filter(Boolean),
+          symbolIds,
           source: node.source?.value,
           context: currentContext(),
           location: getLocation(node.span),

@@ -25,13 +25,14 @@ Status: implemented for single-file scoped symbols.
 
 ## Phase 3: Project analysis
 
-Status: planned.
+Status: implemented for JSON multi-file payloads.
 
-- Accept multiple files or repository snapshots.
-- Resolve relative imports and package imports.
-- Build module dependency graphs.
-- Identify entry points, cycles, dead exports, and architectural hotspots.
-- Preserve per-file source locations for navigation.
+- Accept multiple files through `POST /swc-app/project`.
+- Resolve relative imports across common JS/TS extensions and index files.
+- Build module dependency insights.
+- Preserve per-file source locations and file-prefixed symbol IDs.
+- Resolve cross-file named and default imports to exported symbols where possible.
+- Remaining: repository upload UI, cycle detection, dead export analysis, entry-point detection, and architectural hotspot scoring.
 
 ## Phase 4: Launch readiness
 

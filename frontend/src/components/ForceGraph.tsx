@@ -54,6 +54,23 @@ function buildGraph(insights: Insight[]): { nodes: GraphNode[]; links: GraphLink
     const parentCtxId = ctxId(ctx);
 
     switch (ins.type) {
+      case 'File': {
+        const filePath = (ins as any).path || `file_${idx}`;
+        const id = `file:${safeId(filePath)}`;
+        ensureNode(id, filePath, 'file', ins);
+        link('ctx:global', id, 'contains');
+        break;
+      }
+      case 'ModuleDependency': {
+        const from = (ins as any).from || 'unknown';
+        const to = (ins as any).to || (ins as any).source || 'external';
+        const fromId = `file:${safeId(from)}`;
+        const toId = (ins as any).to ? `file:${safeId(to)}` : `mod:${safeId(to)}`;
+        ensureNode(fromId, from, 'file');
+        ensureNode(toId, to, (ins as any).to ? 'file' : 'module', ins);
+        link(fromId, toId, (ins as any).resolved ? 'imports' : 'imports-unresolved');
+        break;
+      }
       case 'Variable': {
         const name = (ins as any).name || `var_${idx}`;
         const id = `var:${safeId((ins as any).symbolId || name)}`;
@@ -231,33 +248,33 @@ const ForceGraph: React.FC<Props> = ({ insights, mode = 'default' }) => {
         background: '#0b1220',
         label: '#e5e7eb',
         groups: {
-          context: '#6366f1', function: '#22c55e', variable: '#0ea5e9', call: '#f43f5e', symbol: '#eab308', reference: '#38bdf8', module: '#06b6d4', export: '#d946ef', class: '#f59e0b', assignment: '#94a3b8', expression: '#a78bfa', control: '#ef4444', literal: '#64748b',
+          context: '#6366f1', file: '#2563eb', function: '#22c55e', variable: '#0ea5e9', call: '#f43f5e', symbol: '#eab308', reference: '#38bdf8', module: '#06b6d4', export: '#d946ef', class: '#f59e0b', assignment: '#94a3b8', expression: '#a78bfa', control: '#ef4444', literal: '#64748b',
           type: '#14b8a6',
         },
         links: {
-          contains: '#64748b', defines: '#10b981', declares: '#facc15', resolves: '#38bdf8', calls: '#ef4444', targets: '#f43f5e', imports: '#06b6d4', binds: '#22d3ee', exports: '#d946ef', extends: '#f59e0b', assign: '#94a3b8', reads: '#a78bfa', writes: '#f59e0b', return: '#22c55e', throw: '#ef4444', try: '#f97316', update: '#cbd5e1',
+          contains: '#64748b', defines: '#10b981', declares: '#facc15', resolves: '#38bdf8', calls: '#ef4444', targets: '#f43f5e', imports: '#06b6d4', 'imports-unresolved': '#94a3b8', binds: '#22d3ee', exports: '#d946ef', extends: '#f59e0b', assign: '#94a3b8', reads: '#a78bfa', writes: '#f59e0b', return: '#22c55e', throw: '#ef4444', try: '#f97316', update: '#cbd5e1',
         },
       },
       light: {
         background: '#f8fafc',
         label: '#0f172a',
         groups: {
-          context: '#4f46e5', function: '#16a34a', variable: '#0284c7', call: '#dc2626', symbol: '#a16207', reference: '#0369a1', module: '#0891b2', export: '#a21caf', class: '#d97706', assignment: '#64748b', expression: '#7c3aed', control: '#b91c1c', literal: '#6b7280',
+          context: '#4f46e5', file: '#2563eb', function: '#16a34a', variable: '#0284c7', call: '#dc2626', symbol: '#a16207', reference: '#0369a1', module: '#0891b2', export: '#a21caf', class: '#d97706', assignment: '#64748b', expression: '#7c3aed', control: '#b91c1c', literal: '#6b7280',
           type: '#0f766e',
         },
         links: {
-          contains: '#94a3b8', defines: '#16a34a', declares: '#ca8a04', resolves: '#0284c7', calls: '#b91c1c', targets: '#dc2626', imports: '#0891b2', binds: '#06b6d4', exports: '#a21caf', extends: '#d97706', assign: '#64748b', reads: '#7c3aed', writes: '#d97706', return: '#16a34a', throw: '#b91c1c', try: '#ea580c', update: '#64748b',
+          contains: '#94a3b8', defines: '#16a34a', declares: '#ca8a04', resolves: '#0284c7', calls: '#b91c1c', targets: '#dc2626', imports: '#0891b2', 'imports-unresolved': '#64748b', binds: '#06b6d4', exports: '#a21caf', extends: '#d97706', assign: '#64748b', reads: '#7c3aed', writes: '#d97706', return: '#16a34a', throw: '#b91c1c', try: '#ea580c', update: '#64748b',
         },
       },
       vibrant: {
         background: 'linear-gradient(135deg, #0ea5e9 0%, #8b5cf6 100%)',
         label: '#fff',
         groups: {
-          context: '#fff', function: '#34d399', variable: '#93c5fd', call: '#fecaca', symbol: '#fde68a', reference: '#bae6fd', module: '#67e8f9', export: '#f5d0fe', class: '#fdba74', assignment: '#e5e7eb', expression: '#ddd6fe', control: '#fecaca', literal: '#e5e7eb',
+          context: '#fff', file: '#bfdbfe', function: '#34d399', variable: '#93c5fd', call: '#fecaca', symbol: '#fde68a', reference: '#bae6fd', module: '#67e8f9', export: '#f5d0fe', class: '#fdba74', assignment: '#e5e7eb', expression: '#ddd6fe', control: '#fecaca', literal: '#e5e7eb',
           type: '#99f6e4',
         },
         links: {
-          contains: '#e5e7eb', defines: '#34d399', declares: '#fde68a', resolves: '#bae6fd', calls: '#fecaca', targets: '#fecaca', imports: '#67e8f9', binds: '#a5f3fc', exports: '#f5d0fe', extends: '#fdba74', assign: '#e5e7eb', reads: '#ddd6fe', writes: '#fde68a', return: '#bbf7d0', throw: '#fecaca', try: '#fed7aa', update: '#e2e8f0',
+          contains: '#e5e7eb', defines: '#34d399', declares: '#fde68a', resolves: '#bae6fd', calls: '#fecaca', targets: '#fecaca', imports: '#67e8f9', 'imports-unresolved': '#e5e7eb', binds: '#a5f3fc', exports: '#f5d0fe', extends: '#fdba74', assign: '#e5e7eb', reads: '#ddd6fe', writes: '#fde68a', return: '#bbf7d0', throw: '#fecaca', try: '#fed7aa', update: '#e2e8f0',
         },
       },
     };

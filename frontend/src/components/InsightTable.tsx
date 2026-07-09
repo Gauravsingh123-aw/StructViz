@@ -6,6 +6,8 @@ type Props = { insights: Insight[] };
 const TEMPLATE_EXPR_SEPARATOR = ['$', '{...}'].join('');
 
 const TYPES: Insight['type'][] = [
+  'File',
+  'ModuleDependency',
   'Variable',
   'FunctionDefinition',
   'FunctionCall',
@@ -31,6 +33,10 @@ const TYPES: Insight['type'][] = [
 
 function describe(i: Insight) {
   switch (i.type) {
+    case 'File':
+      return (i as any).path;
+    case 'ModuleDependency':
+      return `${(i as any).from} -> ${(i as any).to || (i as any).source}`;
     case 'Variable':
       return `${(i as any).name ?? 'unknown'}${(i as any).init ? ` = ${(i as any).init}` : ''}`;
     case 'FunctionDefinition':
@@ -80,6 +86,8 @@ function badgeColor(type: Insight['type']) {
   switch (type) {
     case 'FunctionDefinition': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300';
     case 'FunctionCall': return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300';
+    case 'File': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300';
+    case 'ModuleDependency': return 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300';
     case 'Variable': return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300';
     case 'Class': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300';
     case 'Interface':
