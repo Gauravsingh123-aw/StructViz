@@ -59,3 +59,52 @@ test("does not leak internal span markers into API insights", async () => {
 
   assert.equal(Object.prototype.hasOwnProperty.call(insights[0], "__span"), false);
 });
+
+test("resolves calls to declarations in the same scope even before declaration order", async () => {
+  const { insights } = await analyze("foo();\nfunction foo(){ return 1; }");
+
+  const definition = insights.find(insight => insight.type === "FunctionDefinition" && insight.name === "foo");
+  const call = insights.find(insight => insight.type === "FunctionCall" && insight.callee === "foo");
+
+  assert.ok(definition.symbolId);
+  assert.equal(call.targetSymbolId, definition.symbolId);
+});
+
+test("resolves shadowed parameter calls to the nearest scope", async () => {
+  const { insights } = await analyze("function foo(){ return 1; }\nfunction wrap(foo){ return foo(); }");
+
+  const globalFoo = insights.find(insight => insight.type === "FunctionDefinition" && insight.name === "foo");
+  const wrappedCall = insights.find(insight => insight.type === "FunctionCall" && insight.callee === "foo" && insight.context === "wrap");
+
+  assert.ok(wrappedCall.targetSymbolId.includes("parameter:foo"));
+  assert.notEqual(wrappedCall.targetSymbolId, globalFoo.symbolId);
+});
+
+test("resolves calls through imported bindings", async () => {
+  const { insights } = await analyze('import { parse as parseCode } from "pkg";\nparseCode(source);');
+
+  const importInsight = insights.find(insight => insight.type === "Import");
+  const importedSymbolId = importInsight.specifiers[0].symbolId;
+  const call = insights.find(insight => insight.type === "FunctionCall" && insight.callee === "parseCode");
+
+  assert.ok(importedSymbolId);
+  assert.equal(call.targetSymbolId, importedSymbolId);
+});
+
+test("adds symbol IDs to exported declarations", async () => {
+  const { insights } = await analyze("export function f(){ return 1; }");
+
+  const definition = insights.find(insight => insight.type === "FunctionDefinition" && insight.name === "f");
+  const exportInsight = insights.find(insight => insight.type === "Export");
+
+  assert.deepEqual(exportInsight.symbolIds, [definition.symbolId]);
+});
+
+test("resolves identifier references to local variables", async () => {
+  const { insights } = await analyze("function f(){ const answer = 42; return answer; }");
+
+  const variable = insights.find(insight => insight.type === "Variable" && insight.name === "answer");
+  const reference = insights.find(insight => insight.type === "Identifier" && insight.name === "answer");
+
+  assert.equal(reference.resolvedSymbolId, variable.symbolId);
+});

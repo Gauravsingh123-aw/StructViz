@@ -13,6 +13,8 @@ export type Insight =
   | {
       type: "Variable";
       name?: string;
+      symbolId?: string;
+      symbolKind?: string;
       init?: string;
       params?: string[];
       context: string;
@@ -24,6 +26,8 @@ export type Insight =
   | {
       type: "FunctionDefinition";
       name: string;
+      symbolId?: string;
+      symbolKind?: string;
       params: string[];
       context: string;
       location: Location;
@@ -36,6 +40,8 @@ export type Insight =
   | {
       type: "FunctionCall";
       callee: string;
+      targetSymbolId?: string;
+      targetSymbolKind?: string;
       args: string[];
       context: string;
       location: Location;
@@ -56,6 +62,8 @@ export type Insight =
   | {
       type: "Identifier";
       name: string;
+      resolvedSymbolId?: string;
+      resolvedSymbolKind?: string;
       context: string;
       location: Location;
       span?: SpanInfo;
@@ -105,7 +113,7 @@ export type Insight =
   | {
       type: "Import";
       source?: string;
-      specifiers?: Array<{ kind: string; imported?: string; local?: string }>;
+      specifiers?: Array<{ kind: string; imported?: string; local?: string; symbolId?: string }>;
       context: string;
       location: Location;
       span?: SpanInfo;
@@ -115,6 +123,7 @@ export type Insight =
       type: "Export";
       exportKind?: string;
       names?: string[];
+      symbolIds?: string[];
       source?: string;
       context: string;
       location: Location;
@@ -124,7 +133,10 @@ export type Insight =
   | {
       type: "Class";
       name: string;
+      symbolId?: string;
+      symbolKind?: string;
       superClass?: string;
+      superSymbolId?: string;
       methods?: Array<{ name?: string; kind?: string; static?: boolean; async?: boolean; generator?: boolean }>;
       context: string;
       location: Location;
@@ -135,6 +147,8 @@ export type Insight =
       type: "Assignment";
       operator: string;
       left: string;
+      targetSymbolId?: string;
+      targetSymbolKind?: string;
       right: string;
       context: string;
       location: Location;
@@ -145,6 +159,8 @@ export type Insight =
       type: "Update";
       operator: string;
       argument: string;
+      targetSymbolId?: string;
+      targetSymbolKind?: string;
       prefix?: boolean;
       context: string;
       location: Location;
@@ -179,6 +195,8 @@ export type Insight =
   | {
       type: "TypeAlias";
       name: string;
+      symbolId?: string;
+      symbolKind?: string;
       context: string;
       location: Location;
       span?: SpanInfo;
@@ -187,6 +205,8 @@ export type Insight =
   | {
       type: "Interface";
       name: string;
+      symbolId?: string;
+      symbolKind?: string;
       context: string;
       location: Location;
       span?: SpanInfo;
@@ -195,6 +215,8 @@ export type Insight =
   | {
       type: "Enum";
       name: string;
+      symbolId?: string;
+      symbolKind?: string;
       members?: string[];
       context: string;
       location: Location;

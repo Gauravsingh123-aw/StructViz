@@ -13,13 +13,15 @@ Status: implemented.
 
 ## Phase 2: Symbol graph
 
-Status: next.
+Status: implemented for single-file scoped symbols.
 
 - Build scoped declaration and reference tables.
 - Resolve local function calls to concrete declarations where possible.
-- Distinguish same-name symbols in different scopes or files.
+- Distinguish same-name symbols in different scopes.
 - Model reads, writes, returns, throws, and calls as typed graph edges.
-- Reduce literal/identifier noise in the graph view with semantic filtering.
+- Resolve imported bindings as symbol targets.
+- Render declarations, references, and calls with semantic symbol edges.
+- Remaining: cross-file same-name disambiguation and semantic filtering controls.
 
 ## Phase 3: Project analysis
 
