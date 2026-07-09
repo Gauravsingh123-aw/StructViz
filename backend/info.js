@@ -1,498 +1,590 @@
 function extractInfo(ast, sourceCode) {
   const insights = [];
   const contextStack = [];
+  const spanBase = typeof ast?.span?.start === "number" ? ast.span.start : 1;
 
   function currentContext() {
     return contextStack.length ? contextStack[contextStack.length - 1] : "global";
   }
 
-  function byteOffsetToLineColumn(code, offset) {
-    const lines = code.slice(0, offset).split('\n');
-    const line = lines.length;
-    const column = lines[lines.length - 1].length + 1;
-    return { line, column };
+  function isNode(value) {
+    return value && typeof value === "object" && typeof value.type === "string";
+  }
+
+  function toSourceOffset(position) {
+    if (typeof position !== "number") return 0;
+    return Math.max(0, Math.min(sourceCode.length, position - spanBase));
+  }
+
+  function offsetToLineColumn(offset) {
+    const lines = sourceCode.slice(0, offset).split("\n");
+    return { line: lines.length, column: lines[lines.length - 1].length + 1 };
   }
 
   function getLocation(span) {
     if (!span || typeof span.start !== "number") return null;
-    return byteOffsetToLineColumn(sourceCode, span.start);
+    return offsetToLineColumn(toSourceOffset(span.start));
   }
 
   function getSpanInfo(span) {
-    if (!span || typeof span.start !== 'number' || typeof span.end !== 'number') return null;
-    const start = byteOffsetToLineColumn(sourceCode, span.start);
-    const end = byteOffsetToLineColumn(sourceCode, span.end);
-    const lines = Math.max(1, end.line - start.line + 1);
-    return { start, end, lines };
+    if (!span || typeof span.start !== "number" || typeof span.end !== "number") return null;
+    const start = offsetToLineColumn(toSourceOffset(span.start));
+    const end = offsetToLineColumn(toSourceOffset(span.end));
+    return { start, end, lines: Math.max(1, end.line - start.line + 1) };
   }
 
   function getPropertyName(prop) {
-    if (!prop || typeof prop !== 'object') return 'unknown';
-    if (prop.type === 'Identifier') return prop.value;
-    if (prop.type === 'PrivateName') return `#${prop.id?.value || 'unknown'}`;
-    if (prop.type === 'StringLiteral') return prop.value;
-    if (prop.type === 'NumericLiteral') return String(prop.value);
-    if (prop.type === 'Computed' && prop.expression) return `[${describeExpression(prop.expression)}]`;
-    return 'unknown';
+    if (!prop || typeof prop !== "object") return "unknown";
+    if (prop.type === "Identifier") return prop.value;
+    if (prop.type === "PrivateName") return `#${prop.id?.value || "unknown"}`;
+    if (prop.type === "StringLiteral") return prop.value;
+    if (prop.type === "NumericLiteral") return String(prop.value);
+    if (prop.type === "Computed" && prop.expression) return `[${describeExpression(prop.expression)}]`;
+    return "unknown";
   }
 
-  function describePattern(pat, depth = 0) {
-    if (!pat || typeof pat !== 'object') return 'param';
-    switch (pat.type) {
-      case 'Identifier':
-        return pat.value;
-      case 'RestElement':
-        return `...${describePattern(pat.argument, depth + 1)}`;
-      case 'AssignmentPattern':
-        return `${describePattern(pat.left, depth + 1)}=${describeExpression(pat.right, depth + 1)}`;
-      case 'ArrayPattern':
-        return `[${(pat.elements || []).map(e => (e ? describePattern(e, depth + 1) : '')).join(', ')}]`;
-      case 'ObjectPattern':
-        return `{ … }`;
+  function describePattern(pattern, depth = 0) {
+    if (!pattern || typeof pattern !== "object") return "param";
+    if (depth > 2) return "...";
+
+    switch (pattern.type) {
+      case "Identifier":
+        return pattern.value;
+      case "RestElement":
+        return `...${describePattern(pattern.argument, depth + 1)}`;
+      case "AssignmentPattern":
+        return `${describePattern(pattern.left, depth + 1)}=${describeExpression(pattern.right, depth + 1)}`;
+      case "ArrayPattern":
+        return `[${(pattern.elements || []).map(item => item ? describePattern(item, depth + 1) : "").join(", ")}]`;
+      case "ObjectPattern":
+        return "{ ... }";
       default:
-        // SWC Parameter node often has shape { type: 'Parameter', pat: { ... } }
-        if (pat.pat) return describePattern(pat.pat, depth + 1);
-        return 'param';
+        if (pattern.pat) return describePattern(pattern.pat, depth + 1);
+        return pattern.type || "param";
     }
   }
 
-  function paramName(p) {
-    if (!p || typeof p !== 'object') return 'param';
-    if (p.type === 'Parameter' && p.pat) return describePattern(p.pat);
-    return describePattern(p);
+  function paramName(param) {
+    if (!param || typeof param !== "object") return "param";
+    if (param.type === "Parameter" && param.pat) return describePattern(param.pat);
+    return describePattern(param);
   }
 
-  function getFunctionName(n) {
+  function getFunctionName(node, fallback = "anonymous") {
     return (
-      n?.id?.value ||
-      n?.identifier?.value ||
-      n?.ident?.value ||
-      (n?.id && (n.id.name || n.id.value)) ||
-      'anonymous'
+      node?.identifier?.value ||
+      node?.id?.value ||
+      node?.ident?.value ||
+      node?.key?.value ||
+      node?.id?.name ||
+      fallback
     );
   }
 
   function describeExpression(expr, depth = 0) {
-    if (!expr || typeof expr !== 'object') return 'unknown';
-    if (depth > 2) return '…';
+    if (!expr || typeof expr !== "object") return "unknown";
+    if (depth > 2) return "...";
+
     switch (expr.type) {
-      case 'Identifier':
+      case "Identifier":
         return expr.value;
-      case 'ThisExpression':
-        return 'this';
-      case 'Super':
-        return 'super';
-      case 'NullLiteral':
-        return 'null';
-      case 'BooleanLiteral':
+      case "ThisExpression":
+        return "this";
+      case "Super":
+        return "super";
+      case "NullLiteral":
+        return "null";
+      case "BooleanLiteral":
         return String(expr.value);
-      case 'StringLiteral':
+      case "StringLiteral":
         return JSON.stringify(expr.value);
-      case 'NumericLiteral':
+      case "NumericLiteral":
         return String(expr.value);
-      case 'BigIntLiteral':
+      case "BigIntLiteral":
         return `${expr.value}n`;
-      case 'TemplateLiteral':
-        return '`' + (expr.quasis?.map(q => q.cooked).join('${…}') || '') + '`';
-      case 'ArrayExpression':
+      case "TemplateLiteral":
+        return "`" + (expr.quasis?.map(part => part.cooked).join("${...}") || "") + "`";
+      case "ArrayExpression":
         return `Array(${expr.elements?.length || 0})`;
-      case 'ObjectExpression': {
-        const keys = (expr.properties || []).map(p => {
-          if (p.type === 'KeyValueProperty') return getPropertyName(p.key);
-          if (p.type === 'Identifier') return p.value;
-          return '…';
+      case "ObjectExpression": {
+        const keys = (expr.properties || []).map(prop => {
+          if (prop.type === "KeyValueProperty") return getPropertyName(prop.key);
+          if (prop.type === "Identifier") return prop.value;
+          return "...";
         });
-        return `{ ${keys.slice(0, 3).join(', ')}${keys.length > 3 ? ', …' : ''} }`;
+        return `{ ${keys.slice(0, 3).join(", ")}${keys.length > 3 ? ", ..." : ""} }`;
       }
-      case 'MemberExpression': {
-        const objectName = describeExpression(expr.object, depth + 1);
-        const propName = getPropertyName(expr.property);
-        return `${objectName}.${propName}`;
-      }
-      case 'CallExpression':
-        return `${describeExpression(expr.callee, depth + 1)}(${(expr.arguments || []).map(a => describeArgument(a, depth + 1)).join(', ')})`;
-      case 'NewExpression':
-        return `new ${describeExpression(expr.callee, depth + 1)}(${(expr.arguments || []).map(a => describeArgument(a, depth + 1)).join(', ')})`;
-      case 'ArrowFunctionExpression':
-        return `(${(expr.params || []).map(paramName).join(', ')}) => …`;
-      case 'FunctionExpression':
-        return `function ${getFunctionName(expr)}(${(expr.params || []).map(paramName).join(', ')})`;
-      case 'UnaryExpression':
+      case "MemberExpression":
+        return `${describeExpression(expr.object, depth + 1)}.${getPropertyName(expr.property)}`;
+      case "CallExpression":
+        return `${describeExpression(expr.callee, depth + 1)}(${(expr.arguments || []).map(arg => describeArgument(arg, depth + 1)).join(", ")})`;
+      case "NewExpression":
+        return `new ${describeExpression(expr.callee, depth + 1)}(${(expr.arguments || []).map(arg => describeArgument(arg, depth + 1)).join(", ")})`;
+      case "ArrowFunctionExpression":
+        return `(${(expr.params || []).map(paramName).join(", ")}) => ...`;
+      case "FunctionExpression":
+        return `function ${getFunctionName(expr)}(${(expr.params || []).map(paramName).join(", ")})`;
+      case "UnaryExpression":
+      case "UpdateExpression":
         return `${expr.operator}${describeExpression(expr.argument, depth + 1)}`;
-      case 'BinaryExpression':
+      case "BinaryExpression":
+      case "LogicalExpression":
         return `${describeExpression(expr.left, depth + 1)} ${expr.operator} ${describeExpression(expr.right, depth + 1)}`;
-      case 'ConditionalExpression':
+      case "ConditionalExpression":
         return `${describeExpression(expr.test, depth + 1)} ? ${describeExpression(expr.consequent, depth + 1)} : ${describeExpression(expr.alternate, depth + 1)}`;
+      case "AwaitExpression":
+        return `await ${describeExpression(expr.argument, depth + 1)}`;
+      case "YieldExpression":
+        return `yield ${describeExpression(expr.argument, depth + 1)}`;
+      case "JSXElement":
+        return "<JSXElement>";
+      case "JSXFragment":
+        return "<>";
       default:
-        return expr.type || 'unknown';
+        return expr.type || "unknown";
     }
   }
 
   function unwrapArgExpression(arg) {
-    if (!arg || typeof arg !== 'object') return null;
-    if ('expression' in arg) return arg.expression;
-    if ('expr' in arg) return arg.expr;
-    if (arg.type === 'SpreadElement') return arg.argument || arg.expr || null;
+    if (!arg || typeof arg !== "object") return null;
+    if ("expression" in arg) return arg.expression;
+    if ("expr" in arg) return arg.expr;
+    if (arg.type === "SpreadElement") return arg.argument || arg.expr || null;
     return arg;
   }
 
   function describeArgument(arg, depth = 0) {
-    if (!arg) return 'unknown';
-    const isSpread = !!(arg && (arg.spread || arg.type === 'SpreadElement'));
-    const expr = unwrapArgExpression(arg) || arg;
-    const value = describeExpression(expr, depth + 1);
+    if (!arg) return "unknown";
+    const isSpread = !!(arg.spread || arg.type === "SpreadElement");
+    const value = describeExpression(unwrapArgExpression(arg) || arg, depth + 1);
     return isSpread ? `...${value}` : value;
   }
 
   function getCalleeName(expr) {
     if (!expr || typeof expr !== "object") return "unknown";
-    if (expr.type === "Identifier") {
-      return expr.value;
-    }
-    if (expr.type === "MemberExpression") {
-      const objectName = describeExpression(expr.object);
-      const propertyName = getPropertyName(expr.property);
-      return `${objectName}.${propertyName}`;
-    }
-    if (expr.type === "CallExpression") {
-      return getCalleeName(expr.callee);
-    }
-    return "unknown";
+    if (expr.type === "Identifier") return expr.value;
+    if (expr.type === "MemberExpression") return `${describeExpression(expr.object)}.${getPropertyName(expr.property)}`;
+    if (expr.type === "CallExpression") return getCalleeName(expr.callee);
+    if (expr.type === "Super") return "super";
+    return describeExpression(expr);
   }
 
   function computeFunctionMetrics(node) {
     const metrics = { branches: 0, loops: 0, returns: 0, calls: 0, statements: 0, usesThis: false };
-    function walkBody(n) {
-      if (!n || typeof n !== 'object') return;
-      switch (n.type) {
-        case 'IfStatement':
-        case 'ConditionalExpression':
-        case 'SwitchStatement':
-        case 'SwitchCase':
-        case 'LogicalExpression':
+
+    function walkBody(value) {
+      if (!value || typeof value !== "object") return;
+
+      if (Array.isArray(value)) {
+        value.forEach(walkBody);
+        return;
+      }
+
+      switch (value.type) {
+        case "IfStatement":
+        case "ConditionalExpression":
+        case "SwitchStatement":
+        case "SwitchCase":
+        case "LogicalExpression":
           metrics.branches++;
           break;
-        case 'ForStatement':
-        case 'ForOfStatement':
-        case 'ForInStatement':
-        case 'WhileStatement':
-        case 'DoWhileStatement':
+        case "ForStatement":
+        case "ForOfStatement":
+        case "ForInStatement":
+        case "WhileStatement":
+        case "DoWhileStatement":
           metrics.loops++;
           break;
-        case 'ReturnStatement':
+        case "ReturnStatement":
           metrics.returns++;
           break;
-        case 'CallExpression':
+        case "CallExpression":
           metrics.calls++;
           break;
-        case 'ThisExpression':
+        case "ThisExpression":
           metrics.usesThis = true;
           break;
       }
-      if (Array.isArray(n.body)) metrics.statements += n.body.length;
-      for (const k in n) {
-        const c = n[k];
-        if (Array.isArray(c)) c.forEach(walkBody);
-        else if (c && typeof c === 'object') walkBody(c);
+
+      if (value.type === "BlockStatement" && Array.isArray(value.stmts)) {
+        metrics.statements += value.stmts.length;
+      }
+
+      for (const child of Object.values(value)) {
+        walkBody(child);
       }
     }
-    if (node.body) walkBody(node.body);
+
+    walkBody(node.body);
     const span = getSpanInfo(node.span);
-    const cyclomatic = 1 + metrics.branches + metrics.loops;
-    return { ...metrics, cyclomatic, linesOfCode: span ? span.lines : undefined };
+    return {
+      ...metrics,
+      cyclomatic: 1 + metrics.branches + metrics.loops,
+      linesOfCode: span ? span.lines : undefined,
+    };
   }
 
   function describeLeft(left) {
-    if (!left || typeof left !== 'object') return 'unknown';
-    if (left.type === 'Identifier') return left.value;
-    if (left.type === 'MemberExpression') return `${describeExpression(left.object)}.${getPropertyName(left.property)}`;
-    if (left.type === 'ArrayPattern' || left.type === 'ObjectPattern') return describePattern(left);
-    return left.type || 'unknown';
+    if (!left || typeof left !== "object") return "unknown";
+    if (left.type === "Identifier") return left.value;
+    if (left.type === "MemberExpression") return `${describeExpression(left.object)}.${getPropertyName(left.property)}`;
+    if (left.type === "ArrayPattern" || left.type === "ObjectPattern") return describePattern(left);
+    return left.type || "unknown";
   }
 
   function push(insight) {
-    insights.push({ scopeDepth: contextStack.length, span: getSpanInfo(insight.__span), ...insight });
+    const { __span, ...publicInsight } = insight;
+    insights.push({ scopeDepth: contextStack.length, span: getSpanInfo(__span), ...publicInsight });
   }
 
-  function walk(n) {
-    if (!n || typeof n !== "object") return;
+  function walkChildren(node, skippedKeys = []) {
+    const skipped = new Set(["type", "span", "ctxt", "decorators", ...skippedKeys]);
+    for (const [key, child] of Object.entries(node)) {
+      if (skipped.has(key) || key.endsWith("Type") || key.endsWith("TypeParams")) continue;
+      if (Array.isArray(child)) {
+        child.forEach(walk);
+      } else {
+        walk(child);
+      }
+    }
+  }
 
-    switch (n.type) {
+  function emitFunction(node, name = getFunctionName(node), span = node.span) {
+    push({
+      type: "FunctionDefinition",
+      name,
+      params: (node.params || []).map(paramName),
+      context: currentContext(),
+      location: getLocation(span),
+      metrics: computeFunctionMetrics(node),
+      async: !!node.async,
+      generator: !!node.generator,
+      __span: span,
+    });
+
+    contextStack.push(name);
+    if (node.body) walk(node.body);
+    contextStack.pop();
+  }
+
+  function emitClassMethod(className, method) {
+    const methodName = getPropertyName(method.key);
+    const functionNode = method.function || method;
+    const fullName = `${className}.${methodName}`;
+
+    emitFunction(
+      {
+        ...functionNode,
+        span: method.span || functionNode.span,
+        params: functionNode.params || [],
+        async: functionNode.async,
+        generator: functionNode.generator,
+      },
+      fullName,
+      method.span || functionNode.span
+    );
+  }
+
+  function walk(node) {
+    if (!isNode(node)) return;
+
+    switch (node.type) {
+      case "Module":
+      case "Script":
+      case "BlockStatement":
+        walkChildren(node);
+        break;
+
       case "VariableDeclaration":
-        n.declarations.forEach(decl => {
-          const idNode = decl.id;
-          const name = idNode?.value || (idNode?.type ? describePattern(idNode) : undefined);
+        node.declarations.forEach(decl => {
+          const name = decl.id?.value || (decl.id?.type ? describePattern(decl.id) : undefined);
           const initNode = decl.init;
-          const initType = initNode?.type;
           const info = {
             type: "Variable",
             name,
             init: initNode ? describeExpression(initNode) : undefined,
             context: currentContext(),
-            location: getLocation(n.span),
-            kind: n.kind || undefined,
-            __span: n.span,
+            location: getLocation(decl.span || node.span),
+            kind: node.kind || undefined,
+            __span: decl.span || node.span,
           };
-          if (initType === "ArrowFunctionExpression") {
+
+          if (initNode?.type === "ArrowFunctionExpression" || initNode?.type === "FunctionExpression") {
             info.params = (initNode.params || []).map(paramName);
             info.isAsync = !!initNode.async;
           }
+
           push(info);
+
+          if (initNode?.type === "ArrowFunctionExpression" || initNode?.type === "FunctionExpression") {
+            emitFunction(initNode, name || getFunctionName(initNode), initNode.span || decl.span);
+          } else {
+            walk(initNode);
+          }
         });
         break;
 
       case "FunctionDeclaration":
+      case "FunctionExpression":
       case "ArrowFunctionExpression":
-      case "FunctionExpression": {
-        const funcName = getFunctionName(n);
-        const params = (n.params || []).map(paramName);
-        const metrics = computeFunctionMetrics(n);
-        push({
-          type: "FunctionDefinition",
-          name: funcName,
-          params,
-          context: currentContext(),
-          location: getLocation(n.span),
-          metrics,
-          async: !!n.async,
-          generator: !!n.generator,
-          __span: n.span,
-        });
-        contextStack.push(funcName);
+        emitFunction(node);
         break;
-      }
 
-      case "CallExpression": {
-        const argsDesc = (n.arguments || []).map(a => describeArgument(a));
+      case "CallExpression":
         push({
           type: "FunctionCall",
-          callee: getCalleeName(n.callee),
-          args: argsDesc,
+          callee: getCalleeName(node.callee),
+          args: (node.arguments || []).map(arg => describeArgument(arg)),
           context: currentContext(),
-          location: getLocation(n.span),
-          argumentCount: argsDesc.length,
-          __span: n.span,
+          location: getLocation(node.span),
+          argumentCount: (node.arguments || []).length,
+          __span: node.span,
         });
+        (node.arguments || []).forEach(arg => walk(unwrapArgExpression(arg)));
         break;
-      }
 
-      case "NewExpression": {
-        const argsDesc = (n.arguments || []).map(a => describeArgument(a));
+      case "NewExpression":
         push({
           type: "FunctionCall",
-          callee: `new ${getCalleeName(n.callee)}`,
-          args: argsDesc,
+          callee: `new ${getCalleeName(node.callee)}`,
+          args: (node.arguments || []).map(arg => describeArgument(arg)),
           context: currentContext(),
-          location: getLocation(n.span),
-          argumentCount: argsDesc.length,
-          __span: n.span,
+          location: getLocation(node.span),
+          argumentCount: (node.arguments || []).length,
+          __span: node.span,
         });
+        (node.arguments || []).forEach(arg => walk(unwrapArgExpression(arg)));
         break;
-      }
 
       case "BinaryExpression":
+      case "LogicalExpression":
         push({
           type: "BinaryExpression",
-          operator: n.operator,
-          left: describeExpression(n.left),
-          right: describeExpression(n.right),
+          operator: node.operator,
+          left: describeExpression(node.left),
+          right: describeExpression(node.right),
           context: currentContext(),
-          location: getLocation(n.span),
-          __span: n.span,
+          location: getLocation(node.span),
+          __span: node.span,
         });
+        walk(node.left);
+        walk(node.right);
         break;
 
       case "AssignmentExpression":
         push({
           type: "Assignment",
-          operator: n.operator,
-          left: describeLeft(n.left),
-          right: describeExpression(n.right),
+          operator: node.operator,
+          left: describeLeft(node.left),
+          right: describeExpression(node.right),
           context: currentContext(),
-          location: getLocation(n.span),
-          __span: n.span,
+          location: getLocation(node.span),
+          __span: node.span,
         });
+        walk(node.right);
         break;
 
       case "UpdateExpression":
         push({
           type: "Update",
-          operator: n.operator,
-          argument: describeExpression(n.argument),
-          prefix: !!n.prefix,
+          operator: node.operator,
+          argument: describeExpression(node.argument),
+          prefix: !!node.prefix,
           context: currentContext(),
-          location: getLocation(n.span),
-          __span: n.span,
+          location: getLocation(node.span),
+          __span: node.span,
         });
         break;
 
       case "ReturnStatement":
         push({
           type: "Return",
-          value: n.argument ? describeExpression(n.argument) : undefined,
+          value: node.argument ? describeExpression(node.argument) : undefined,
           context: currentContext(),
-          location: getLocation(n.span),
-          __span: n.span,
+          location: getLocation(node.span),
+          __span: node.span,
         });
+        walk(node.argument);
         break;
 
       case "ThrowStatement":
         push({
           type: "Throw",
-          value: n.argument ? describeExpression(n.argument) : undefined,
+          value: node.argument ? describeExpression(node.argument) : undefined,
           context: currentContext(),
-          location: getLocation(n.span),
-          __span: n.span,
+          location: getLocation(node.span),
+          __span: node.span,
         });
+        walk(node.argument);
         break;
 
       case "TryStatement":
         push({
           type: "TryCatch",
-          hasCatch: !!n.handler,
-          hasFinally: !!n.finalizer,
+          hasCatch: !!node.handler,
+          hasFinally: !!node.finalizer,
           context: currentContext(),
-          location: getLocation(n.span),
-          __span: n.span,
+          location: getLocation(node.span),
+          __span: node.span,
         });
+        walkChildren(node);
         break;
 
       case "Identifier":
         push({
           type: "Identifier",
-          name: n.value,
+          name: node.value,
           context: currentContext(),
-          location: getLocation(n.span),
-          __span: n.span,
+          location: getLocation(node.span),
+          __span: node.span,
         });
         break;
 
       case "StringLiteral":
-        push({
-          type: "StringLiteral",
-          value: n.value,
-          context: currentContext(),
-          location: getLocation(n.span),
-          __span: n.span,
-        });
+        push({ type: "StringLiteral", value: node.value, context: currentContext(), location: getLocation(node.span), __span: node.span });
         break;
 
       case "BooleanLiteral":
-        push({
-          type: "BooleanLiteral",
-          value: n.value,
-          context: currentContext(),
-          location: getLocation(n.span),
-          __span: n.span,
-        });
+        push({ type: "BooleanLiteral", value: node.value, context: currentContext(), location: getLocation(node.span), __span: node.span });
         break;
 
       case "NumericLiteral":
-        push({
-          type: "NumericLiteral",
-          value: n.value,
-          context: currentContext(),
-          location: getLocation(n.span),
-          __span: n.span,
-        });
+        push({ type: "NumericLiteral", value: node.value, context: currentContext(), location: getLocation(node.span), __span: node.span });
         break;
 
       case "NullLiteral":
-        push({
-          type: "NullLiteral",
-          value: null,
-          context: currentContext(),
-          location: getLocation(n.span),
-          __span: n.span,
-        });
+        push({ type: "NullLiteral", value: null, context: currentContext(), location: getLocation(node.span), __span: node.span });
         break;
 
       case "TemplateLiteral":
         push({
           type: "TemplateLiteral",
-          parts: (n.quasis || []).map(q => q.cooked),
-          expressions: (n.expressions || []).map(e => describeExpression(e)),
+          parts: (node.quasis || []).map(part => part.cooked),
+          expressions: (node.expressions || []).map(expr => describeExpression(expr)),
           context: currentContext(),
-          location: getLocation(n.span),
-          __span: n.span,
+          location: getLocation(node.span),
+          __span: node.span,
         });
+        (node.expressions || []).forEach(walk);
         break;
 
-      case "ImportDeclaration": {
-        const specs = (n.specifiers || []).map(s => {
-          if (s.type === 'ImportDefaultSpecifier') return { kind: 'default', local: s.local?.value };
-          if (s.type === 'ImportNamespaceSpecifier') return { kind: 'namespace', local: s.local?.value };
-          if (s.type === 'ImportSpecifier') return { kind: 'named', imported: s.imported?.value || s.imported?.name, local: s.local?.value };
-          return { kind: 'unknown' };
-        });
+      case "ImportDeclaration":
         push({
           type: "Import",
-          source: n.source?.value,
-          specifiers: specs,
+          source: node.source?.value,
+          specifiers: (node.specifiers || []).map(specifier => {
+            if (specifier.type === "ImportDefaultSpecifier") return { kind: "default", local: specifier.local?.value };
+            if (specifier.type === "ImportNamespaceSpecifier") return { kind: "namespace", local: specifier.local?.value };
+            if (specifier.type === "ImportSpecifier") {
+              return {
+                kind: "named",
+                imported: specifier.imported?.value || specifier.imported?.name || specifier.local?.value,
+                local: specifier.local?.value,
+              };
+            }
+            return { kind: "unknown" };
+          }),
           context: currentContext(),
-          location: getLocation(n.span),
-          __span: n.span,
+          location: getLocation(node.span),
+          __span: node.span,
         });
         break;
-      }
 
       case "ExportDefaultDeclaration":
       case "ExportDefaultExpression":
       case "ExportDeclaration":
       case "ExportNamedDeclaration":
       case "ExportAllDeclaration": {
-        const kind = n.type.replace('Declaration', '').replace('Expression', 'Expression');
         let names = [];
-        if (n.declaration && n.declaration.id) names.push(n.declaration.id.value || n.declaration.id.name);
-        if (Array.isArray(n.specifiers)) names = names.concat(n.specifiers.map(s => s.exported?.value || s.orig?.value || s.local?.value).filter(Boolean));
+        const declaration = node.declaration;
+        const declarationName = declaration && getFunctionName(declaration, null);
+        if (declarationName) names.push(declarationName);
+        if (Array.isArray(node.specifiers)) {
+          names = names.concat(node.specifiers.map(specifier => (
+            specifier.exported?.value ||
+            specifier.exported?.name ||
+            specifier.orig?.value ||
+            specifier.local?.value
+          )).filter(Boolean));
+        }
         push({
           type: "Export",
-          exportKind: kind,
+          exportKind: node.type,
           names,
-          source: n.source?.value,
+          source: node.source?.value,
           context: currentContext(),
-          location: getLocation(n.span),
-          __span: n.span,
+          location: getLocation(node.span),
+          __span: node.span,
         });
+        walk(declaration);
         break;
       }
 
       case "ClassDeclaration":
       case "ClassExpression": {
-        const name = getFunctionName(n);
-        const superClass = n.superClass ? describeExpression(n.superClass) : undefined;
-        const methods = [];
-        (n.body?.body || []).forEach(m => {
-          if (m.type === 'MethodProperty' || m.type === 'ClassMethod') {
-            methods.push({ name: getPropertyName(m.key), kind: m.kind || 'method', static: !!m.isStatic, async: !!m.isAsync, generator: !!m.isGenerator });
+        const name = getFunctionName(node);
+        const body = Array.isArray(node.body) ? node.body : node.body?.body || [];
+        push({
+          type: "Class",
+          name,
+          superClass: node.superClass ? describeExpression(node.superClass) : undefined,
+          methods: body.filter(member => member.type === "MethodProperty" || member.type === "ClassMethod").map(member => ({
+            name: getPropertyName(member.key),
+            kind: member.kind || "method",
+            static: !!member.isStatic,
+            async: !!member.function?.async || !!member.isAsync,
+            generator: !!member.function?.generator || !!member.isGenerator,
+          })),
+          context: currentContext(),
+          location: getLocation(node.span),
+          __span: node.span,
+        });
+
+        contextStack.push(name);
+        body.forEach(member => {
+          if (member.type === "MethodProperty" || member.type === "ClassMethod") {
+            emitClassMethod(name, member);
+          } else {
+            walk(member);
           }
         });
-        push({
-          type: 'Class',
-          name,
-          superClass,
-          methods,
-          context: currentContext(),
-          location: getLocation(n.span),
-          __span: n.span,
-        });
-        contextStack.push(name);
+        contextStack.pop();
         break;
       }
 
-      default:
-        for (const key in n) {
-          const child = n[key];
-          if (Array.isArray(child)) {
-            child.forEach(c => walk(c));
-          } else if (typeof child === "object" && child !== null) {
-            walk(child);
-          }
-        }
-    }
+      case "TsTypeAliasDeclaration":
+        push({
+          type: "TypeAlias",
+          name: node.id?.value || "anonymous",
+          context: currentContext(),
+          location: getLocation(node.span),
+          __span: node.span,
+        });
+        break;
 
-    if (["FunctionDeclaration", "ArrowFunctionExpression", "FunctionExpression", "ClassDeclaration", "ClassExpression"].includes(n.type)) {
-      contextStack.pop();
+      case "TsInterfaceDeclaration":
+        push({
+          type: "Interface",
+          name: node.id?.value || "anonymous",
+          context: currentContext(),
+          location: getLocation(node.span),
+          __span: node.span,
+        });
+        break;
+
+      case "TsEnumDeclaration":
+        push({
+          type: "Enum",
+          name: node.id?.value || "anonymous",
+          members: (node.members || []).map(member => getPropertyName(member.id)),
+          context: currentContext(),
+          location: getLocation(node.span),
+          __span: node.span,
+        });
+        break;
+
+      default:
+        walkChildren(node, ["typeAnnotation", "returnType", "typeParameters", "typeParams", "typeArguments"]);
     }
   }
 

@@ -175,11 +175,40 @@ export type Insight =
       location: Location;
       span?: SpanInfo;
       scopeDepth?: number;
+    }
+  | {
+      type: "TypeAlias";
+      name: string;
+      context: string;
+      location: Location;
+      span?: SpanInfo;
+      scopeDepth?: number;
+    }
+  | {
+      type: "Interface";
+      name: string;
+      context: string;
+      location: Location;
+      span?: SpanInfo;
+      scopeDepth?: number;
+    }
+  | {
+      type: "Enum";
+      name: string;
+      members?: string[];
+      context: string;
+      location: Location;
+      span?: SpanInfo;
+      scopeDepth?: number;
     };
 
 export type ApiResponse = {
   message: string;
   payload: Insight[];
+  meta?: {
+    parser?: string;
+    insightCount?: number;
+  };
 };
 
 export type GraphNode = {

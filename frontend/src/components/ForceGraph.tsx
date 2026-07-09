@@ -107,6 +107,16 @@ function buildGraph(insights: Insight[]): { nodes: GraphNode[]; links: GraphLink
         }
         break;
       }
+      case 'TypeAlias':
+      case 'Interface':
+      case 'Enum': {
+        const name = (ins as any).name || `type_${idx}`;
+        const kind = ins.type === 'TypeAlias' ? 'type' : ins.type.toLowerCase();
+        const id = `type:${safeId(kind)}:${safeId(name)}`;
+        ensureNode(id, `${kind} ${name}`, 'type', ins);
+        link(parentCtxId, id, 'contains');
+        break;
+      }
       case 'Assignment': {
         const aid = `assign:${idx}`;
         ensureNode(aid, `assign ${(ins as any).left} ${(ins as any).operator} ${(ins as any).right}`, 'assignment', ins);
@@ -178,6 +188,7 @@ const ForceGraph: React.FC<Props> = ({ insights, mode = 'default' }) => {
         label: '#e5e7eb',
         groups: {
           context: '#6366f1', function: '#22c55e', variable: '#0ea5e9', call: '#f43f5e', symbol: '#eab308', module: '#06b6d4', export: '#d946ef', class: '#f59e0b', assignment: '#94a3b8', expression: '#a78bfa', control: '#ef4444', literal: '#64748b',
+          type: '#14b8a6',
         },
         links: {
           contains: '#64748b', defines: '#10b981', calls: '#ef4444', targets: '#f43f5e', imports: '#06b6d4', binds: '#22d3ee', exports: '#d946ef', extends: '#f59e0b', assign: '#94a3b8', reads: '#a78bfa', writes: '#f59e0b', return: '#22c55e', throw: '#ef4444', try: '#f97316', update: '#cbd5e1',
@@ -188,6 +199,7 @@ const ForceGraph: React.FC<Props> = ({ insights, mode = 'default' }) => {
         label: '#0f172a',
         groups: {
           context: '#4f46e5', function: '#16a34a', variable: '#0284c7', call: '#dc2626', symbol: '#a16207', module: '#0891b2', export: '#a21caf', class: '#d97706', assignment: '#64748b', expression: '#7c3aed', control: '#b91c1c', literal: '#6b7280',
+          type: '#0f766e',
         },
         links: {
           contains: '#94a3b8', defines: '#16a34a', calls: '#b91c1c', targets: '#dc2626', imports: '#0891b2', binds: '#06b6d4', exports: '#a21caf', extends: '#d97706', assign: '#64748b', reads: '#7c3aed', writes: '#d97706', return: '#16a34a', throw: '#b91c1c', try: '#ea580c', update: '#64748b',
@@ -198,6 +210,7 @@ const ForceGraph: React.FC<Props> = ({ insights, mode = 'default' }) => {
         label: '#fff',
         groups: {
           context: '#fff', function: '#34d399', variable: '#93c5fd', call: '#fecaca', symbol: '#fde68a', module: '#67e8f9', export: '#f5d0fe', class: '#fdba74', assignment: '#e5e7eb', expression: '#ddd6fe', control: '#fecaca', literal: '#e5e7eb',
+          type: '#99f6e4',
         },
         links: {
           contains: '#e5e7eb', defines: '#34d399', calls: '#fecaca', targets: '#fecaca', imports: '#67e8f9', binds: '#a5f3fc', exports: '#f5d0fe', extends: '#fdba74', assign: '#e5e7eb', reads: '#ddd6fe', writes: '#fde68a', return: '#bbf7d0', throw: '#fecaca', try: '#fed7aa', update: '#e2e8f0',
@@ -349,7 +362,7 @@ const ForceGraph: React.FC<Props> = ({ insights, mode = 'default' }) => {
       setTimeout(fit, 800);
       sim.on('end', fit);
     }
-  }, [nodes, links, theme, mode]);
+  }, [nodes, links, theme, mode, isMini]);
 
   function zoomIn() {
     if (!zoomRef.current || !svgRef.current) return;

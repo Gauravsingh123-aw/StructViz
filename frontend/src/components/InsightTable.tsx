@@ -3,6 +3,8 @@ import { Insight } from '../types';
 
 type Props = { insights: Insight[] };
 
+const TEMPLATE_EXPR_SEPARATOR = ['$', '{...}'].join('');
+
 const TYPES: Insight['type'][] = [
   'Variable',
   'FunctionDefinition',
@@ -22,6 +24,9 @@ const TYPES: Insight['type'][] = [
   'Return',
   'Throw',
   'TryCatch',
+  'TypeAlias',
+  'Interface',
+  'Enum',
 ];
 
 function describe(i: Insight) {
@@ -45,7 +50,7 @@ function describe(i: Insight) {
     case 'NullLiteral':
       return 'null';
     case 'TemplateLiteral':
-      return '`' + ((i as any).parts || []).join('${…}') + '`';
+      return '`' + ((i as any).parts || []).join(TEMPLATE_EXPR_SEPARATOR) + '`';
     case 'Import':
       return `import from ${(i as any).source || '?'}`;
     case 'Export':
@@ -62,6 +67,12 @@ function describe(i: Insight) {
       return `throw ${(i as any).value ?? ''}`.trim();
     case 'TryCatch':
       return `try${(i as any).hasCatch ? '/catch' : ''}${(i as any).hasFinally ? '/finally' : ''}`;
+    case 'TypeAlias':
+      return `type ${(i as any).name}`;
+    case 'Interface':
+      return `interface ${(i as any).name}`;
+    case 'Enum':
+      return `enum ${(i as any).name}${(i as any).members?.length ? ` { ${(i as any).members.join(', ')} }` : ''}`;
   }
 }
 
@@ -71,6 +82,10 @@ function badgeColor(type: Insight['type']) {
     case 'FunctionCall': return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300';
     case 'Variable': return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300';
     case 'Class': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300';
+    case 'Interface':
+    case 'TypeAlias':
+    case 'Enum':
+      return 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300';
     case 'Import': return 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300';
     case 'Export': return 'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-900/30 dark:text-fuchsia-300';
     case 'Assignment': return 'bg-slate-100 text-slate-700 dark:bg-slate-700/50 dark:text-slate-200';

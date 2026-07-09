@@ -1,12 +1,8 @@
 const express=require("express");
 const app=express();
 const cors=require('cors')
-app.use(express.text());
+app.use(express.text({ type: "*/*", limit: "2mb" }));
 app.use(cors());
-const swc = require("@swc/core");
-const {extractInfo}=require("./info.js")
-
-
 
 const swc_app=require("./Api/SWC_API.js")
 console.log("reached to api")
