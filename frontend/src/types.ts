@@ -33,6 +33,50 @@ export type Insight =
       scopeDepth?: number;
     }
   | {
+      type: "EntryPoint";
+      path: string;
+      reason?: string;
+      context: string;
+      location: Location;
+      span?: SpanInfo;
+      scopeDepth?: number;
+    }
+  | {
+      type: "ModuleCycle";
+      cycle: string[];
+      size?: number;
+      cycleId?: string;
+      context: string;
+      location: Location;
+      span?: SpanInfo;
+      scopeDepth?: number;
+    }
+  | {
+      type: "DeadExport";
+      name: string;
+      symbolId?: string;
+      filePath: string;
+      context: string;
+      location: Location;
+      span?: SpanInfo;
+      scopeDepth?: number;
+    }
+  | {
+      type: "Hotspot";
+      path: string;
+      score: number;
+      incoming?: number;
+      outgoing?: number;
+      functions?: number;
+      classes?: number;
+      calls?: number;
+      exports?: number;
+      context: string;
+      location: Location;
+      span?: SpanInfo;
+      scopeDepth?: number;
+    }
+  | {
       type: "Variable";
       name?: string;
       filePath?: string;
@@ -258,6 +302,9 @@ export type ApiResponse = {
     insightCount?: number;
     fileCount?: number;
     dependencyCount?: number;
+    cycleCount?: number;
+    deadExportCount?: number;
+    entryPointCount?: number;
   };
 };
 

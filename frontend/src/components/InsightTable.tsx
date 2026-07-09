@@ -8,6 +8,10 @@ const TEMPLATE_EXPR_SEPARATOR = ['$', '{...}'].join('');
 const TYPES: Insight['type'][] = [
   'File',
   'ModuleDependency',
+  'EntryPoint',
+  'ModuleCycle',
+  'DeadExport',
+  'Hotspot',
   'Variable',
   'FunctionDefinition',
   'FunctionCall',
@@ -37,6 +41,14 @@ function describe(i: Insight) {
       return (i as any).path;
     case 'ModuleDependency':
       return `${(i as any).from} -> ${(i as any).to || (i as any).source}`;
+    case 'EntryPoint':
+      return `entry ${(i as any).path}`;
+    case 'ModuleCycle':
+      return `cycle ${((i as any).cycle || []).join(' -> ')}`;
+    case 'DeadExport':
+      return `unused export ${(i as any).name} in ${(i as any).filePath}`;
+    case 'Hotspot':
+      return `${(i as any).path} score ${(i as any).score}`;
     case 'Variable':
       return `${(i as any).name ?? 'unknown'}${(i as any).init ? ` = ${(i as any).init}` : ''}`;
     case 'FunctionDefinition':
@@ -88,6 +100,10 @@ function badgeColor(type: Insight['type']) {
     case 'FunctionCall': return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300';
     case 'File': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300';
     case 'ModuleDependency': return 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300';
+    case 'EntryPoint': return 'bg-lime-100 text-lime-700 dark:bg-lime-900/30 dark:text-lime-300';
+    case 'ModuleCycle': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
+    case 'DeadExport': return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300';
+    case 'Hotspot': return 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300';
     case 'Variable': return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300';
     case 'Class': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300';
     case 'Interface':

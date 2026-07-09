@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { analyzeProject, normalizeProjectPath, resolveImportPath } = require("../utility/project_module");
+const { analyzeProject, findModuleCycles, normalizeProjectPath, resolveImportPath } = require("../utility/project_module");
 
 test("normalizes project paths to stable POSIX paths", () => {
   assert.equal(normalizeProjectPath(".\\src\\app.ts"), "src/app.ts");
@@ -70,4 +70,37 @@ test("keeps unresolved external imports as external dependencies", async () => {
   assert.equal(dependency.to, null);
   assert.equal(dependency.external, true);
   assert.equal(call.targetSymbolId, undefined);
+});
+
+test("detects module cycles", () => {
+  const cycles = findModuleCycles(["a.ts", "b.ts", "c.ts"], [
+    { from: "a.ts", to: "b.ts", resolved: true },
+    { from: "b.ts", to: "c.ts", resolved: true },
+    { from: "c.ts", to: "a.ts", resolved: true },
+  ]);
+
+  assert.deepEqual(cycles, [["a.ts", "b.ts", "c.ts", "a.ts"]]);
+});
+
+test("emits entry points, module cycles, dead exports, and hotspots", async () => {
+  const result = await analyzeProject({
+    files: [
+      { path: "src/entry.ts", code: 'import { used } from "./a"; used();' },
+      { path: "src/a.ts", code: 'import { b } from "./b"; export function used(){ return b(); } export function unused(){ return 0; }' },
+      { path: "src/b.ts", code: 'import { used } from "./a"; export function b(){ return used(); }' },
+    ],
+  });
+
+  const entry = result.insights.find(insight => insight.type === "EntryPoint" && insight.path === "src/entry.ts");
+  const cycle = result.insights.find(insight => insight.type === "ModuleCycle");
+  const deadExport = result.insights.find(insight => insight.type === "DeadExport" && insight.name === "unused");
+  const hotspots = result.insights.filter(insight => insight.type === "Hotspot");
+
+  assert.ok(entry);
+  assert.deepEqual(cycle.cycle, ["src/a.ts", "src/b.ts", "src/a.ts"]);
+  assert.equal(deadExport.filePath, "src/a.ts");
+  assert.ok(hotspots.some(insight => insight.path === "src/a.ts" && insight.score > 0));
+  assert.equal(result.meta.cycleCount, 1);
+  assert.equal(result.meta.deadExportCount, 1);
+  assert.equal(result.meta.entryPointCount, 1);
 });

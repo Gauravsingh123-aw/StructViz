@@ -91,6 +91,137 @@ function resolveImportedName(specifier) {
   return specifier.imported || specifier.local;
 }
 
+function findModuleCycles(filePaths, dependencies) {
+  const adjacency = new Map(filePaths.map(filePath => [filePath, []]));
+  const cycles = [];
+  const seen = new Set();
+
+  dependencies
+    .filter(dependency => dependency.resolved && dependency.to)
+    .forEach(dependency => {
+      adjacency.get(dependency.from)?.push(dependency.to);
+    });
+
+  function canonicalCycle(cycle) {
+    const nodes = cycle.slice(0, -1);
+    let best = nodes;
+
+    for (let index = 1; index < nodes.length; index++) {
+      const rotated = nodes.slice(index).concat(nodes.slice(0, index));
+      if (rotated.join("\0") < best.join("\0")) best = rotated;
+    }
+
+    return best.concat(best[0]);
+  }
+
+  function visit(node, stack = []) {
+    const existingIndex = stack.indexOf(node);
+    if (existingIndex !== -1) {
+      const cycle = canonicalCycle(stack.slice(existingIndex).concat(node));
+      const key = cycle.join(" -> ");
+      if (!seen.has(key)) {
+        seen.add(key);
+        cycles.push(cycle);
+      }
+      return;
+    }
+
+    stack.push(node);
+    (adjacency.get(node) || []).forEach(next => visit(next, stack.slice()));
+  }
+
+  filePaths.forEach(filePath => visit(filePath));
+  return cycles;
+}
+
+function buildProjectInsights(fileResults, dependencies, importTargetByLocalSymbol) {
+  const filePaths = fileResults.map(file => file.path);
+  const incomingCounts = new Map(filePaths.map(filePath => [filePath, 0]));
+  const outgoingCounts = new Map(filePaths.map(filePath => [filePath, 0]));
+  const importedExportSymbols = new Set(importTargetByLocalSymbol.values());
+  const projectInsights = [];
+
+  dependencies.forEach(dependency => {
+    if (!dependency.resolved || !dependency.to) return;
+    outgoingCounts.set(dependency.from, (outgoingCounts.get(dependency.from) || 0) + 1);
+    incomingCounts.set(dependency.to, (incomingCounts.get(dependency.to) || 0) + 1);
+  });
+
+  filePaths
+    .filter(filePath => (incomingCounts.get(filePath) || 0) === 0)
+    .forEach(filePath => {
+      projectInsights.push({
+        type: "EntryPoint",
+        path: filePath,
+        reason: "no-incoming-imports",
+        context: "project",
+        location: null,
+        span: null,
+      });
+    });
+
+  findModuleCycles(filePaths, dependencies).forEach((cycle, index) => {
+    projectInsights.push({
+      type: "ModuleCycle",
+      cycle,
+      size: Math.max(0, cycle.length - 1),
+      cycleId: `cycle:${index + 1}`,
+      context: "project",
+      location: null,
+      span: null,
+    });
+  });
+
+  fileResults.forEach(fileResult => {
+    fileResult.insights
+      .filter(insight => insight.type === "Export")
+      .forEach(exportInsight => {
+        (exportInsight.names || []).forEach((name, index) => {
+          const symbolId = exportInsight.symbolIds?.[index];
+          if (!symbolId || importedExportSymbols.has(symbolId)) return;
+          projectInsights.push({
+            type: "DeadExport",
+            name,
+            symbolId,
+            filePath: fileResult.path,
+            context: "project",
+            location: exportInsight.location,
+            span: exportInsight.span,
+          });
+        });
+      });
+  });
+
+  fileResults.forEach(fileResult => {
+    const functions = fileResult.insights.filter(insight => insight.type === "FunctionDefinition").length;
+    const classes = fileResult.insights.filter(insight => insight.type === "Class").length;
+    const calls = fileResult.insights.filter(insight => insight.type === "FunctionCall").length;
+    const exports = fileResult.insights.filter(insight => insight.type === "Export").reduce((count, insight) => count + (insight.names || []).length, 0);
+    const incoming = incomingCounts.get(fileResult.path) || 0;
+    const outgoing = outgoingCounts.get(fileResult.path) || 0;
+    const score = incoming * 3 + outgoing * 2 + functions + classes * 2 + Math.ceil(calls / 2) + exports;
+
+    if (score === 0) return;
+
+    projectInsights.push({
+      type: "Hotspot",
+      path: fileResult.path,
+      score,
+      incoming,
+      outgoing,
+      functions,
+      classes,
+      calls,
+      exports,
+      context: "project",
+      location: null,
+      span: null,
+    });
+  });
+
+  return projectInsights;
+}
+
 async function analyzeProject(payload) {
   const files = normalizeFiles(payload);
 
@@ -179,7 +310,9 @@ async function analyzeProject(payload) {
     }
   });
 
-  insights.push(...dependencies);
+  const projectInsights = buildProjectInsights(fileResults, dependencies, importTargetByLocalSymbol);
+
+  insights.push(...dependencies, ...projectInsights);
 
   return {
     insights,
@@ -187,6 +320,9 @@ async function analyzeProject(payload) {
       fileCount: fileResults.length,
       insightCount: insights.length,
       dependencyCount: dependencies.length,
+      cycleCount: projectInsights.filter(insight => insight.type === "ModuleCycle").length,
+      deadExportCount: projectInsights.filter(insight => insight.type === "DeadExport").length,
+      entryPointCount: projectInsights.filter(insight => insight.type === "EntryPoint").length,
     },
   };
 }
@@ -202,6 +338,7 @@ async function project_module(req, res) {
 
 module.exports = {
   analyzeProject,
+  findModuleCycles,
   normalizeProjectPath,
   resolveImportPath,
   project_module,

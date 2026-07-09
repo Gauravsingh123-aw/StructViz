@@ -32,7 +32,11 @@ Status: implemented for JSON multi-file payloads.
 - Build module dependency insights.
 - Preserve per-file source locations and file-prefixed symbol IDs.
 - Resolve cross-file named and default imports to exported symbols where possible.
-- Remaining: repository upload UI, cycle detection, dead export analysis, entry-point detection, and architectural hotspot scoring.
+- Detect entry-point candidates from files with no incoming local imports.
+- Detect local module cycles.
+- Flag exported symbols that are not imported by another analyzed file.
+- Score per-file hotspots from fan-in, fan-out, declarations, calls, and exports.
+- Remaining: repository upload UI, richer dead-export rules for public packages, route/framework entry-point detection, and configurable hotspot weighting.
 
 ## Phase 4: Launch readiness
 
